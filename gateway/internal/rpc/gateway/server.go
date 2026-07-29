@@ -8,7 +8,9 @@ import (
 	"sync"
 
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/glog"
 	"google.golang.org/grpc"
+	gatewaypb "one_adventure_rpc/proto/gateway"
 )
 
 var ErrServerStarted = errors.New("gateway rpc server is already started")
@@ -32,9 +34,9 @@ func New(ctx context.Context) (*Server, error) {
 	return newServer(cfg, newGatewayService()), nil
 }
 
-func newServer(cfg Config, service GatewayServiceServer) *Server {
+func newServer(cfg Config, service gatewaypb.GatewayServiceServer) *Server {
 	grpcServer := grpc.NewServer()
-	RegisterGatewayServiceServer(grpcServer, service)
+	gatewaypb.RegisterGatewayServiceServer(grpcServer, service)
 	return &Server{
 		port:       cfg.Port,
 		grpcServer: grpcServer,
@@ -60,6 +62,7 @@ func (s *Server) Start() error {
 			g.Log().Errorf(context.Background(), "gateway rpc server stopped unexpectedly: %v", serveErr)
 		}
 	}()
+	glog.Infof(context.Background(), "gateway rpc server listening on port %d", s.port)
 	return nil
 }
 

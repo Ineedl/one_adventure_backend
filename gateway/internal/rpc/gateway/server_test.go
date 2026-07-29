@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	gatewaypb "one_adventure_rpc/proto/gateway"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -44,9 +45,9 @@ func TestGatewayRPCServer(t *testing.T) {
 		t.Fatalf("grpc.NewClient() error = %v", err)
 	}
 	t.Cleanup(func() { _ = clientConn.Close() })
-	client := NewGatewayServiceClient(clientConn)
+	client := gatewaypb.NewGatewayServiceClient(clientConn)
 
-	registerResponse, err := client.RegisterGateway(context.Background(), &RegisterReq{InstanceId: "gateway-1"})
+	registerResponse, err := client.RegisterGateway(context.Background(), &gatewaypb.RegisterReq{InstanceId: "gateway-1"})
 	if err != nil {
 		t.Fatalf("RegisterGateway() error = %v", err)
 	}
@@ -54,7 +55,7 @@ func TestGatewayRPCServer(t *testing.T) {
 		t.Fatalf("RegisterGateway() response = %#v", registerResponse)
 	}
 
-	heartResponse, err := client.Heart(context.Background(), &HeartReq{})
+	heartResponse, err := client.Heart(context.Background(), &gatewaypb.HeartReq{})
 	if err != nil {
 		t.Fatalf("Heart() error = %v", err)
 	}

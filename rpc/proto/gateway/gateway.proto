@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package gateway;	//声明包为proto
 
-option go_package = "./gateway;gateway";
+option go_package = "one_adventure_rpc/proto/gateway;gateway";
 
 // 定义消息格式
 message RegisterReq {
