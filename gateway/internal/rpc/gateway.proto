@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package gateway;	//声明包为proto
+
+option go_package = "./gateway;gateway";
+
+// 定义消息格式
+message RegisterReq {
+  string type = 1;      // 注册类型
+  string ip = 2;        // ip信息
+  int32 port=3;         //连接端口信息
+  int64 register_time = 4;  // 注册时间戳 ms
+  string version = 5;   //版本
+  int32 weight = 6;    //权重
+  string instance_id = 7;        //实例id
+}
+
+message RegisterResp {
+  int32 code=1;     //响应码
+  string message=2;
+}
+
+message HeartReq{
+
+}
+
+message HeartResp{
+  int32 code=1;
+  string message=2;
+}
+
+// 定义服务接口
+service GatewayService {
+  rpc RegisterGateway (RegisterReq) returns (RegisterResp);
+  rpc Heart (HeartReq) returns (HeartResp);
+}
