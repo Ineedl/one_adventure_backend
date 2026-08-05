@@ -1,0 +1,27 @@
+# Copy this file to config.yaml and adjust addresses for the deployment environment.
+server:
+  address: ":8000"
+  openapiPath: "/api.json"
+  swaggerPath: "/swagger"
+
+rpc:
+  computing:
+    port: 8082
+    registration:
+      gatewayIp: "127.0.0.1"
+      gatewayPort: 8081
+      serviceType: "computing"
+      serviceIp: "127.0.0.1"
+      version: "v1.0.0"
+      weight: 10
+      # 留空时自动生成 computing_机器码。
+      instanceId: ""
+      registerTimeout: "8s"
+      # 注册成功后，超过该时间未收到 Gateway Ping 则重新注册。
+      gatewayPingTimeout: "30s"
+      retryInitialInterval: "1s"
+      retryMaxInterval: "30s"
+
+logger:
+  level: "all"
+  stdout: true

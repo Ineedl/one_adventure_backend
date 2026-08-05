@@ -40,4 +40,5 @@ go run .
 
 Gateway gRPC 服务端口位于 `manifest/config/config.yaml` 的 `rpc.gateway.port`，
 默认监听 `8081`。服务启动时会注册 `gateway.GatewayService`，当前提供
-`RegisterGateway` 和 `Heart` 两个 RPC 方法。
+`RegisterGateway` RPC。注册成功后由 Gateway 主动周期调用微服务统一的
+`ping.PingService`，微服务不再调用 Gateway 心跳接口。

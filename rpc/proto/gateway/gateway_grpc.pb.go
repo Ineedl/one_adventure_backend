@@ -20,7 +20,6 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	GatewayService_RegisterGateway_FullMethodName = "/gateway.GatewayService/RegisterGateway"
-	GatewayService_Heart_FullMethodName           = "/gateway.GatewayService/Heart"
 )
 
 // GatewayServiceClient is the client API for GatewayService service.
@@ -28,7 +27,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GatewayServiceClient interface {
 	RegisterGateway(ctx context.Context, in *RegisterReq, opts ...grpc.CallOption) (*RegisterResp, error)
-	Heart(ctx context.Context, in *HeartReq, opts ...grpc.CallOption) (*HeartResp, error)
 }
 
 type gatewayServiceClient struct {
@@ -48,21 +46,11 @@ func (c *gatewayServiceClient) RegisterGateway(ctx context.Context, in *Register
 	return out, nil
 }
 
-func (c *gatewayServiceClient) Heart(ctx context.Context, in *HeartReq, opts ...grpc.CallOption) (*HeartResp, error) {
-	out := new(HeartResp)
-	err := c.cc.Invoke(ctx, GatewayService_Heart_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // GatewayServiceServer is the server API for GatewayService service.
 // All implementations must embed UnimplementedGatewayServiceServer
 // for forward compatibility
 type GatewayServiceServer interface {
 	RegisterGateway(context.Context, *RegisterReq) (*RegisterResp, error)
-	Heart(context.Context, *HeartReq) (*HeartResp, error)
 	mustEmbedUnimplementedGatewayServiceServer()
 }
 
@@ -72,9 +60,6 @@ type UnimplementedGatewayServiceServer struct {
 
 func (UnimplementedGatewayServiceServer) RegisterGateway(context.Context, *RegisterReq) (*RegisterResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterGateway not implemented")
-}
-func (UnimplementedGatewayServiceServer) Heart(context.Context, *HeartReq) (*HeartResp, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Heart not implemented")
 }
 func (UnimplementedGatewayServiceServer) mustEmbedUnimplementedGatewayServiceServer() {}
 
@@ -107,24 +92,6 @@ func _GatewayService_RegisterGateway_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GatewayService_Heart_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HeartReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(GatewayServiceServer).Heart(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: GatewayService_Heart_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GatewayServiceServer).Heart(ctx, req.(*HeartReq))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // GatewayService_ServiceDesc is the grpc.ServiceDesc for GatewayService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -135,10 +102,6 @@ var GatewayService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterGateway",
 			Handler:    _GatewayService_RegisterGateway_Handler,
-		},
-		{
-			MethodName: "Heart",
-			Handler:    _GatewayService_Heart_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

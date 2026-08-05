@@ -13,24 +13,17 @@ message RegisterReq {
   string version = 5;   //版本
   int32 weight = 6;    //权重
   string instance_id = 7;        //实例id
+  string registration_token = 8; // 本轮注册唯一标识
 }
 
 message RegisterResp {
   int32 code=1;     //响应码
   string message=2;
-}
-
-message HeartReq{
-
-}
-
-message HeartResp{
-  int32 code=1;
-  string message=2;
+  int64 ping_interval_ms = 3; // Gateway 调用微服务 Ping 的周期
+  int64 lease_duration_ms = 4; // 微服务未收到 Gateway Ping 后重新注册的等待时间
 }
 
 // 定义服务接口
 service GatewayService {
   rpc RegisterGateway (RegisterReq) returns (RegisterResp);
-  rpc Heart (HeartReq) returns (HeartResp);
 }

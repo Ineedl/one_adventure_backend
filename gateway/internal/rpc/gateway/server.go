@@ -19,6 +19,7 @@ var ErrServerStarted = errors.New("gateway rpc server is already started")
 type Server struct {
 	port       int
 	grpcServer *grpc.Server
+	service    *gatewayService
 
 	mu       sync.RWMutex
 	listener net.Listener
@@ -31,15 +32,16 @@ func New(ctx context.Context) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newServer(cfg, newGatewayService()), nil
+	return newServer(cfg, newGatewayService(cfg)), nil
 }
 
-func newServer(cfg Config, service gatewaypb.GatewayServiceServer) *Server {
+func newServer(cfg Config, service *gatewayService) *Server {
 	grpcServer := grpc.NewServer()
 	gatewaypb.RegisterGatewayServiceServer(grpcServer, service)
 	return &Server{
 		port:       cfg.Port,
 		grpcServer: grpcServer,
+		service:    service,
 	}
 }
 
@@ -56,6 +58,7 @@ func (s *Server) Start() error {
 		return fmt.Errorf("listen gateway rpc on port %d: %w", s.port, err)
 	}
 	s.listener = listener
+	s.service.startHealthChecks()
 
 	go func() {
 		if serveErr := s.grpcServer.Serve(listener); serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
@@ -87,10 +90,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	select {
 	case <-done:
+		s.service.close()
 		return nil
 	case <-ctx.Done():
 		s.grpcServer.Stop()
 		<-done
+		s.service.close()
 		return ctx.Err()
 	}
 }
@@ -98,4 +103,5 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // Stop immediately stops the server.
 func (s *Server) Stop() {
 	s.grpcServer.Stop()
+	s.service.close()
 }

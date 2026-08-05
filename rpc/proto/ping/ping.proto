@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package ping;
+
+option go_package = "one_adventure_rpc/proto/ping;ping";
+
+message PingReq {
+  string type = 1;
+  string instance_id = 2;
+  string registration_token = 3;
+}
+
+message PingResp {
+  int32 code = 1;
+  string message = 2;
+}
+
+service PingService {
+  rpc Ping (PingReq) returns (PingResp);
+}

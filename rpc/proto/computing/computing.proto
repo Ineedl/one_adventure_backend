@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package computing;
+
+option go_package = "one_adventure_rpc/proto/computing;computing";
+
+message CollisionInfo {
+  string shape_type = 1; //形状
+  double x=2;
+  double y=3 ;
+  double radius=4;    //半径
+  double width=5;
+  double height=6;
+  double rotation=7;  //旋转角度
+  string collision_id = 8; //碰撞id
+}
+
+message CollisionCalculationReq {
+  repeated CollisionInfo first_collision=1;
+  repeated CollisionInfo second_collision=2;
+}
+
+message CollisionCalculationResp {
+  bool is_contact=1;
+}
+
+// 定义服务接口
+service ComputingService {
+  rpc CollisionCalculation (CollisionCalculationReq) returns (CollisionCalculationResp);
+}
