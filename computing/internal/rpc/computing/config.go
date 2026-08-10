@@ -6,37 +6,38 @@ import (
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
-	"one_adventure_servicekit/registration"
+	"github.com/gogf/gf/v2/os/gcfg"
+	"one_adventure_servicekit/discovery"
 )
 
-// Config contains the computing gRPC server configuration stored under the
-// "rpc.computing" node.
+// Config contains the computing RPC configuration loaded from rpc.yaml.
 type Config struct {
-	Port         int                `json:"port"`
-	Registration RegistrationConfig `json:"registration"`
+	Port int        `json:"port"`
+	Etcd EtcdConfig `json:"etcd"`
 }
 
-type RegistrationConfig struct {
-	GatewayIP          string        `json:"gatewayIp"`
-	GatewayPort        int           `json:"gatewayPort"`
-	ServiceType        string        `json:"serviceType"`
-	ServiceIP          string        `json:"serviceIp"`
-	Version            string        `json:"version"`
-	Weight             int32         `json:"weight"`
-	InstanceID         string        `json:"instanceId"`
-	RegisterTimeout    time.Duration `json:"registerTimeout"`
-	GatewayPingTimeout time.Duration `json:"gatewayPingTimeout"`
-	RetryInitial       time.Duration `json:"retryInitialInterval"`
-	RetryMax           time.Duration `json:"retryMaxInterval"`
+type EtcdConfig struct {
+	Endpoints     []string      `json:"endpoints"`
+	DialTimeout   time.Duration `json:"dialTimeout"`
+	LeaseTTL      int64         `json:"leaseTtl"`
+	ServerName    string        `json:"serverName"`
+	InstanceID    string        `json:"instanceId"`
+	Address       string        `json:"address"`
+	HTTPPort      int           `json:"httpPort"`
+	WatchServices []string      `json:"watchServices"`
 }
 
 func loadConfig(ctx context.Context) (Config, error) {
-	value, err := g.Cfg().Get(ctx, "rpc.computing")
+	adapter, err := gcfg.NewAdapterFile("rpc.yaml")
+	if err != nil {
+		return Config{}, fmt.Errorf("create computing rpc config adapter: %w", err)
+	}
+	value, err := gcfg.NewWithAdapter(adapter).Get(ctx, ".")
 	if err != nil {
 		return Config{}, fmt.Errorf("read computing rpc config: %w", err)
 	}
 	if value.IsEmpty() {
-		return Config{}, fmt.Errorf("computing rpc config is required")
+		return Config{}, fmt.Errorf("rpc config is required")
 	}
 
 	var cfg Config
@@ -53,27 +54,19 @@ func (c Config) validate() error {
 	if c.Port < 1 || c.Port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")
 	}
-	if _, err := registration.New(c.registrationConfig()); err != nil {
-		return fmt.Errorf("registration config: %w", err)
+	if err := c.discoveryConfig().Validate(); err != nil {
+		return err
 	}
-	return nil
+	return c.registration().Validate()
 }
 
-func (c Config) registrationConfig() registration.Config {
-	return registration.Config{
-		GatewayIP:   c.Registration.GatewayIP,
-		GatewayPort: c.Registration.GatewayPort,
-		Service: registration.ServiceInfo{
-			Type:       c.Registration.ServiceType,
-			IP:         c.Registration.ServiceIP,
-			Port:       c.Port,
-			Version:    c.Registration.Version,
-			Weight:     c.Registration.Weight,
-			InstanceID: c.Registration.InstanceID,
-		},
-		RegisterTimeout:      c.Registration.RegisterTimeout,
-		GatewayPingTimeout:   c.Registration.GatewayPingTimeout,
-		RetryInitialInterval: c.Registration.RetryInitial,
-		RetryMaxInterval:     c.Registration.RetryMax,
-	}
+func (c Config) discoveryConfig() discovery.Config {
+	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog}
+}
+
+func debugLog(message string, args ...any) {
+	g.Log().Debug(context.Background(), append([]any{message}, args...)...)
+}
+func (c Config) registration() discovery.Registration {
+	return discovery.Registration{ServerName: c.Etcd.ServerName, InstanceID: c.Etcd.InstanceID, LeaseTTL: c.Etcd.LeaseTTL, Instance: discovery.Instance{Address: c.Etcd.Address, GRPCPort: fmt.Sprint(c.Port), HTTPPort: fmt.Sprint(c.Etcd.HTTPPort)}}
 }

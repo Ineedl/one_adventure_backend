@@ -5,24 +5,40 @@ import (
 	"fmt"
 	"time"
 
+	"one_adventure_servicekit/discovery"
+
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gcfg"
 )
 
-// Config contains the gateway gRPC server configuration stored under the
-// "rpc.gateway" node.
+// Config contains the gateway RPC configuration loaded from rpc.yaml.
 type Config struct {
-	Port         int           `json:"port"`
-	PingInterval time.Duration `json:"pingInterval"`
-	PingTimeout  time.Duration `json:"pingTimeout"`
+	Port int        `json:"port"`
+	Etcd EtcdConfig `json:"etcd"`
+}
+
+type EtcdConfig struct {
+	Endpoints     []string      `json:"endpoints"`
+	DialTimeout   time.Duration `json:"dialTimeout"`
+	LeaseTTL      int64         `json:"leaseTtl"`
+	ServerName    string        `json:"serverName"`
+	InstanceID    string        `json:"instanceId"`
+	Address       string        `json:"address"`
+	HTTPPort      int           `json:"httpPort"`
+	WatchServices []string      `json:"watchServices"`
 }
 
 func loadConfig(ctx context.Context) (Config, error) {
-	value, err := g.Cfg().Get(ctx, "rpc.gateway")
+	adapter, err := gcfg.NewAdapterFile("rpc.yaml")
+	if err != nil {
+		return Config{}, fmt.Errorf("create gateway rpc config adapter: %w", err)
+	}
+	value, err := gcfg.NewWithAdapter(adapter).Get(ctx, ".")
 	if err != nil {
 		return Config{}, fmt.Errorf("read gateway rpc config: %w", err)
 	}
 	if value.IsEmpty() {
-		return Config{}, fmt.Errorf("gateway rpc config is required")
+		return Config{}, fmt.Errorf("rpc config is required")
 	}
 
 	var cfg Config
@@ -36,14 +52,13 @@ func loadConfig(ctx context.Context) (Config, error) {
 }
 
 func (c Config) validate() error {
-	if c.Port < 1 || c.Port > 65535 {
-		return fmt.Errorf("port must be between 1 and 65535")
-	}
-	if c.PingInterval <= 0 {
-		return fmt.Errorf("ping interval must be greater than zero")
-	}
-	if c.PingTimeout <= 0 {
-		return fmt.Errorf("ping timeout must be greater than zero")
-	}
-	return nil
+	return c.discoveryConfig().Validate()
+}
+
+func (c Config) discoveryConfig() discovery.Config {
+	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog}
+}
+
+func debugLog(message string, args ...any) {
+	g.Log().Debug(context.Background(), append([]any{message}, args...)...)
 }

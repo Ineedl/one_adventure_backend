@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "one_adventure_rpc/proto/user;user";
+
+message LoginReq{
+  string username=1;
+  string password=2;
+}
+
+message LoginResp{
+  string token=1;
+  string refresh_token=2;
+}
+
+
+message UserInfoGetReq{
+  string token=1;
+}
+
+message UserInfoGetResp{
+  int64 user_id=1;
+}
+
+message RefreshTokenReq{
+  string refresh_token=1;
+}
+
+message RefreshTokenResp{
+  string token=1;
+}
+
+// 定义服务接口
+service UserService {
+  rpc Login (LoginReq) returns (LoginResp);
+  rpc RefreshToken (RefreshTokenReq) returns (RefreshTokenResp);
+}

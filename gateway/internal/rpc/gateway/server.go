@@ -4,104 +4,85 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/os/glog"
 	"google.golang.org/grpc"
-	gatewaypb "one_adventure_rpc/proto/gateway"
+	"one_adventure_gateway/internal/service"
+	"one_adventure_servicekit/discovery"
 )
 
-var ErrServerStarted = errors.New("gateway rpc server is already started")
+var ErrServerStarted = errors.New("gateway discovery is already started")
 
-// Server owns the gateway gRPC server and its TCP listener.
+// Server owns gateway service discovery. Gateway no longer exposes a service
+// registration RPC; it resolves all backends directly from etcd.
 type Server struct {
-	port       int
-	grpcServer *grpc.Server
-	service    *gatewayService
-
-	mu       sync.RWMutex
-	listener net.Listener
+	discoverer *discovery.Discoverer
+	mu         sync.Mutex
+	cancel     context.CancelFunc
+	done       chan struct{}
 }
 
-// New initializes the gateway RPC server from application configuration and
-// registers GatewayService.
 func New(ctx context.Context) (*Server, error) {
 	cfg, err := loadConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return newServer(cfg, newGatewayService(cfg)), nil
-}
-
-func newServer(cfg Config, service *gatewayService) *Server {
-	grpcServer := grpc.NewServer()
-	gatewaypb.RegisterGatewayServiceServer(grpcServer, service)
-	return &Server{
-		port:       cfg.Port,
-		grpcServer: grpcServer,
-		service:    service,
+	discoverer, err := discovery.NewDiscoverer(cfg.discoveryConfig())
+	if err != nil {
+		return nil, fmt.Errorf("create service discovery: %w", err)
 	}
+	return &Server{discoverer: discoverer}, nil
 }
 
-// Start listens on the configured port and serves in the background.
 func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.listener != nil {
+	if s.cancel != nil {
 		return ErrServerStarted
 	}
-
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
-	if err != nil {
-		return fmt.Errorf("listen gateway rpc on port %d: %w", s.port, err)
-	}
-	s.listener = listener
-	s.service.startHealthChecks()
-
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel, s.done = cancel, make(chan struct{})
+	ready := make(chan error, 1)
 	go func() {
-		if serveErr := s.grpcServer.Serve(listener); serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
-			g.Log().Errorf(context.Background(), "gateway rpc server stopped unexpectedly: %v", serveErr)
+		defer close(s.done)
+		if err := s.discoverer.RunAllReady(ctx, ready); err != nil && !errors.Is(err, context.Canceled) {
+			g.Log().Errorf(context.Background(), "gateway service discovery stopped: %v", err)
 		}
 	}()
-	glog.Infof(context.Background(), "gateway rpc server listening on port %d", s.port)
+	if err := <-ready; err != nil {
+		cancel()
+		return fmt.Errorf("initialize gateway discovery: %w", err)
+	}
 	return nil
 }
 
-// Address returns the listener address after Start has succeeded.
-func (s *Server) Address() net.Addr {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.listener == nil {
-		return nil
+func (s *Server) ResolveService(serviceName string) (grpc.ClientConnInterface, error) {
+	connection, err := s.discoverer.Connection(serviceName)
+	if errors.Is(err, discovery.ErrServiceUnavailable) {
+		return nil, fmt.Errorf("%w: %s", service.ErrServiceUnavailable, serviceName)
 	}
-	return s.listener.Addr()
+	return connection, err
 }
 
-// Shutdown gracefully stops the server. When ctx expires, active RPCs are
-// canceled and ctx.Err is returned.
-func (s *Server) Shutdown(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		s.grpcServer.GracefulStop()
-		close(done)
-	}()
+func (s *Server) Shutdown(ctx context.Context) error { return s.stop(ctx) }
+func (s *Server) Stop()                              { _ = s.stop(context.Background()) }
 
+func (s *Server) stop(ctx context.Context) error {
+	s.mu.Lock()
+	cancel, done := s.cancel, s.done
+	s.cancel, s.done = nil, nil
+	s.mu.Unlock()
+	if cancel == nil {
+		s.discoverer.Close()
+		return nil
+	}
+	cancel()
 	select {
 	case <-done:
-		s.service.close()
 		return nil
 	case <-ctx.Done():
-		s.grpcServer.Stop()
-		<-done
-		s.service.close()
+		s.discoverer.Close()
 		return ctx.Err()
 	}
-}
-
-// Stop immediately stops the server.
-func (s *Server) Stop() {
-	s.grpcServer.Stop()
-	s.service.close()
 }

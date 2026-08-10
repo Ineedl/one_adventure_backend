@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package item;
+
+option go_package = "one_adventure_rpc/proto/item;item";
+
+
+// 定义服务接口
+service ItemService {
+
+}

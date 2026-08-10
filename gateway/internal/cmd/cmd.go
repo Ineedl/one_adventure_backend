@@ -4,11 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gcmd"
 
-	"one_adventure_gateway/internal/controller/hello"
+	"one_adventure_gateway/internal/router"
 	gatewayrpc "one_adventure_gateway/internal/rpc/gateway"
 	"one_adventure_gateway/internal/websocket"
 )
@@ -19,19 +18,15 @@ var (
 		Usage: "main",
 		Brief: "start http server",
 		Func: func(ctx context.Context, parser *gcmd.Parser) (err error) {
-			s := g.Server()
-			s.Group("/", func(group *ghttp.RouterGroup) {
-				group.Middleware(ghttp.MiddlewareHandlerResponse)
-				group.Bind(
-					hello.NewV1(),
-				)
-			})
-
 			wsServer, err := websocket.New(ctx)
 			if err != nil {
 				return err
 			}
 			rpcServer, err := gatewayrpc.New(ctx)
+			if err != nil {
+				return err
+			}
+			s, err := router.New(ctx, rpcServer)
 			if err != nil {
 				return err
 			}

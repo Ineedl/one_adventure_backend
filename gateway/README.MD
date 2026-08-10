@@ -36,9 +36,8 @@ go run .
 默认请求处理器会原样返回 `data`，业务可通过
 `wsServer.Manager().SetRequestHandler(...)` 替换。
 
-## Gateway RPC
+## Service discovery
 
-Gateway gRPC 服务端口位于 `manifest/config/config.yaml` 的 `rpc.gateway.port`，
-默认监听 `8081`。服务启动时会注册 `gateway.GatewayService`，当前提供
-`RegisterGateway` RPC。注册成功后由 Gateway 主动周期调用微服务统一的
-`ping.PingService`，微服务不再调用 Gateway 心跳接口。
+Gateway 不再暴露注册或 Ping RPC。它从 `rpc.gateway.etcd` 配置连接 etcd，
+读取并 watch `/one_adventure/` 下的服务实例；HTTP 请求通过 servicekit
+维护的 gRPC round-robin 连接转发到当前实例集合。

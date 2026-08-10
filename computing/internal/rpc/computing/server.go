@@ -10,16 +10,18 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 	"google.golang.org/grpc"
 	computingpb "one_adventure_rpc/proto/computing"
-	"one_adventure_servicekit/registration"
+	"one_adventure_servicekit/discovery"
 )
 
 var ErrServerStarted = errors.New("computing rpc server is already started")
 
 // Server owns the computing gRPC server and its TCP listener.
 type Server struct {
-	port       int
-	grpcServer *grpc.Server
-	registrationManager *registration.Manager
+	port          int
+	grpcServer    *grpc.Server
+	registrar     *discovery.Registrar
+	discoverer    *discovery.Discoverer
+	watchServices []string
 
 	mu               sync.RWMutex
 	listener         net.Listener
@@ -33,23 +35,24 @@ func New(ctx context.Context) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	manager, err := registration.New(cfg.registrationConfig())
+	registrar, err := discovery.NewRegistrar(cfg.discoveryConfig(), cfg.registration())
 	if err != nil {
-		return nil, fmt.Errorf("create registration manager: %w", err)
+		return nil, fmt.Errorf("create service registrar: %w", err)
 	}
-	return newServer(cfg, newComputingService(), manager), nil
+	discoverer, err := discovery.NewDiscoverer(cfg.discoveryConfig())
+	if err != nil {
+		return nil, fmt.Errorf("create service discovery: %w", err)
+	}
+	return newServer(cfg, newComputingService(), registrar, discoverer), nil
 }
 
-func newServer(cfg Config, service computingpb.ComputingServiceServer, manager *registration.Manager) *Server {
+func newServer(cfg Config, service computingpb.ComputingServiceServer, registrar *discovery.Registrar, discoverer *discovery.Discoverer) *Server {
 	grpcServer := grpc.NewServer()
 	computingpb.RegisterComputingServiceServer(grpcServer, service)
-	if manager != nil {
-		manager.RegisterPingService(grpcServer)
-	}
 	return &Server{
-		port:                cfg.Port,
-		grpcServer:          grpcServer,
-		registrationManager: manager,
+		port:       cfg.Port,
+		grpcServer: grpcServer,
+		registrar:  registrar, discoverer: discoverer, watchServices: cfg.Etcd.WatchServices,
 	}
 }
 
@@ -67,7 +70,7 @@ func (s *Server) Start() error {
 	}
 	s.listener = listener
 	var registrationCtx context.Context
-	if s.registrationManager != nil {
+	if s.registrar != nil || s.discoverer != nil {
 		var cancel context.CancelFunc
 		registrationCtx, cancel = context.WithCancel(context.Background())
 		s.registrationStop = cancel
@@ -79,14 +82,17 @@ func (s *Server) Start() error {
 			g.Log().Errorf(context.Background(), "computing rpc server stopped unexpectedly: %v", serveErr)
 		}
 	}()
-	if s.registrationManager != nil {
+	if s.registrar != nil {
 		registrationDone := s.registrationDone
 		go func(done chan struct{}) {
 			defer close(done)
-			if runErr := s.registrationManager.Run(registrationCtx); runErr != nil && !errors.Is(runErr, context.Canceled) {
-				g.Log().Errorf(context.Background(), "computing registration manager stopped unexpectedly: %v", runErr)
+			if runErr := s.registrar.Run(registrationCtx); runErr != nil && !errors.Is(runErr, context.Canceled) {
+				g.Log().Errorf(context.Background(), "computing service registrar stopped unexpectedly: %v", runErr)
 			}
 		}(registrationDone)
+		if s.discoverer != nil {
+			go func() { _ = s.discoverer.Run(registrationCtx, s.watchServices) }()
+		}
 	}
 	g.Log().Infof(context.Background(), "computing rpc server listening on port %d", s.port)
 	return nil
@@ -141,5 +147,8 @@ func (s *Server) stopRegistration() {
 	}
 	if done != nil {
 		<-done
+	}
+	if s.discoverer != nil {
+		s.discoverer.Close()
 	}
 }

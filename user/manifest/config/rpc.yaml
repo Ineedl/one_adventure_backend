@@ -1,0 +1,10 @@
+port: 8083
+etcd:
+  endpoints: ["127.0.0.1:2379"]
+  dialTimeout: "5s"
+  leaseTtl: 10
+  serverName: "user"
+  instanceId: ""
+  address: "127.0.0.1"
+  httpPort: 8000
+  watchServices: []
