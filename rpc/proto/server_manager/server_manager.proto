@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package server_manager;
+
+option go_package = "one_adventure_rpc/proto/server_manager;server_manager";
+
+message ServerInfoGetReq{
+  int32 type=1; //0 全部可用逻辑服务器 1未被扮演的逻辑服务器 2已扮演的逻辑服务器
+}
+
+
+message ChannelInfo{
+  uint64 id=1;
+  int32 index=2;
+  string name=3;
+  uint64 server_id=4;
+}
+
+message ServerInfo{
+  uint64  id=1;
+  string name=2;
+  repeated ChannelInfo channels=3;
+
+}
+
+message ServerInfoGetResp{
+  repeated ServerInfo servers=1;
+}
+
+// 定义服务接口
+service ServerManagerService {
+  rpc ServerInfoGet(ServerInfoGetReq) returns (ServerInfoGetResp);
+}

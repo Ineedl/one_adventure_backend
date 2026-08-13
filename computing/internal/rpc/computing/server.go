@@ -9,6 +9,7 @@ import (
 
 	"github.com/gogf/gf/v2/frame/g"
 	"google.golang.org/grpc"
+	tracekit "one_adventure_observability_trace/trace"
 	computingpb "one_adventure_rpc/proto/computing"
 	"one_adventure_servicekit/discovery"
 )
@@ -46,8 +47,11 @@ func New(ctx context.Context) (*Server, error) {
 	return newServer(cfg, newComputingService(), registrar, discoverer), nil
 }
 
+// InstanceID 返回当前服务注册到 etcd 使用的实例唯一标识。
+func (s *Server) InstanceID() string { return s.registrar.InstanceID() }
+
 func newServer(cfg Config, service computingpb.ComputingServiceServer, registrar *discovery.Registrar, discoverer *discovery.Discoverer) *Server {
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(tracekit.UnaryServerInterceptor), grpc.StreamInterceptor(tracekit.StreamServerInterceptor))
 	computingpb.RegisterComputingServiceServer(grpcServer, service)
 	return &Server{
 		port:       cfg.Port,

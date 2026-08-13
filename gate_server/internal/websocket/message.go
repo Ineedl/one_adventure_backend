@@ -22,6 +22,8 @@ var (
 type Request struct {
 	Type      string          `json:"type"`
 	SessionID string          `json:"session_id"`
+	TraceID   string          `json:"trace_id,omitempty"`
+	RequestID string          `json:"request_id,omitempty"`
 	Data      json.RawMessage `json:"data"`
 }
 
@@ -29,6 +31,8 @@ type Request struct {
 type Response struct {
 	Type      string          `json:"type"`
 	SessionID string          `json:"session_id"`
+	TraceID   string          `json:"trace_id,omitempty"`
+	RequestID string          `json:"request_id,omitempty"`
 	Code      int             `json:"code"`
 	Data      json.RawMessage `json:"data"`
 }

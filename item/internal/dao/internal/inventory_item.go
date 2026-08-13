@@ -24,6 +24,8 @@ type InventoryItemColumns struct {
 	Id         string //
 	TemplateId string //
 	InstanceId string //
+	Index      string //
+	UserId     string //
 }
 
 // inventoryItemColumns holds the columns for the table inventory_item.
@@ -31,6 +33,8 @@ var inventoryItemColumns = InventoryItemColumns{
 	Id:         "id",
 	TemplateId: "template_id",
 	InstanceId: "instance_id",
+	Index:      "index",
+	UserId:     "user_id",
 }
 
 // NewInventoryItemDao creates and returns a new DAO object for table data access.

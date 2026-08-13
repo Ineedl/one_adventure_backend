@@ -7,6 +7,10 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gcmd"
+	obsconfig "one_adventure_observability_config"
+	obslog "one_adventure_observability_log"
+	metric "one_adventure_observability_metric"
+	tracekit "one_adventure_observability_trace/trace"
 
 	"one_adventure_computing/internal/controller/hello"
 	computingrpc "one_adventure_computing/internal/rpc/computing"
@@ -18,6 +22,20 @@ var (
 		Usage: "main",
 		Brief: "start computing servers",
 		Func: func(ctx context.Context, parser *gcmd.Parser) (err error) {
+			observability, err := obsconfig.Load(ctx, "trace.yaml")
+			if err != nil {
+				return err
+			}
+			shutdownTrace, err := tracekit.Init("computing", observability.TraceRuntime())
+			if err != nil {
+				return err
+			}
+			defer shutdownTrace(context.Background())
+			shutdownMetric, err := metric.Init(observability.MetricRuntime())
+			if err != nil {
+				return err
+			}
+			defer shutdownMetric(context.Background())
 			s := g.Server()
 			s.Group("/", func(group *ghttp.RouterGroup) {
 				group.Middleware(ghttp.MiddlewareHandlerResponse)
@@ -30,6 +48,8 @@ var (
 			if err != nil {
 				return err
 			}
+			shutdownLog := obslog.Init("computing", rpcServer.InstanceID(), observability.LogRuntime())
+			defer shutdownLog(context.Background())
 			if err = s.Start(); err != nil {
 				return err
 			}

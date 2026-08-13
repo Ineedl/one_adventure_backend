@@ -7,7 +7,10 @@
 package item
 
 import (
+	context "context"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -15,12 +18,15 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-const ()
+const (
+	ItemService_InventoryConfGet_FullMethodName = "/item.ItemService/InventoryConfGet"
+)
 
 // ItemServiceClient is the client API for ItemService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ItemServiceClient interface {
+	InventoryConfGet(ctx context.Context, in *InventoryConfGetReq, opts ...grpc.CallOption) (*InventoryConfGetResp, error)
 }
 
 type itemServiceClient struct {
@@ -31,10 +37,20 @@ func NewItemServiceClient(cc grpc.ClientConnInterface) ItemServiceClient {
 	return &itemServiceClient{cc}
 }
 
+func (c *itemServiceClient) InventoryConfGet(ctx context.Context, in *InventoryConfGetReq, opts ...grpc.CallOption) (*InventoryConfGetResp, error) {
+	out := new(InventoryConfGetResp)
+	err := c.cc.Invoke(ctx, ItemService_InventoryConfGet_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ItemServiceServer is the server API for ItemService service.
 // All implementations must embed UnimplementedItemServiceServer
 // for forward compatibility
 type ItemServiceServer interface {
+	InventoryConfGet(context.Context, *InventoryConfGetReq) (*InventoryConfGetResp, error)
 	mustEmbedUnimplementedItemServiceServer()
 }
 
@@ -42,6 +58,9 @@ type ItemServiceServer interface {
 type UnimplementedItemServiceServer struct {
 }
 
+func (UnimplementedItemServiceServer) InventoryConfGet(context.Context, *InventoryConfGetReq) (*InventoryConfGetResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InventoryConfGet not implemented")
+}
 func (UnimplementedItemServiceServer) mustEmbedUnimplementedItemServiceServer() {}
 
 // UnsafeItemServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -55,13 +74,36 @@ func RegisterItemServiceServer(s grpc.ServiceRegistrar, srv ItemServiceServer) {
 	s.RegisterService(&ItemService_ServiceDesc, srv)
 }
 
+func _ItemService_InventoryConfGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InventoryConfGetReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ItemServiceServer).InventoryConfGet(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ItemService_InventoryConfGet_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ItemServiceServer).InventoryConfGet(ctx, req.(*InventoryConfGetReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ItemService_ServiceDesc is the grpc.ServiceDesc for ItemService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ItemService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "item.ItemService",
 	HandlerType: (*ItemServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
-	Streams:     []grpc.StreamDesc{},
-	Metadata:    "proto/item/item.proto",
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "InventoryConfGet",
+			Handler:    _ItemService_InventoryConfGet_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/item/item.proto",
 }

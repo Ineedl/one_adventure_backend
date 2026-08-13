@@ -14,4 +14,6 @@ type InventoryItem struct {
 	Id         interface{} //
 	TemplateId interface{} //
 	InstanceId interface{} //
+	Index      interface{} //
+	UserId     interface{} //
 }

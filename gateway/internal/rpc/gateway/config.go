@@ -56,9 +56,13 @@ func (c Config) validate() error {
 }
 
 func (c Config) discoveryConfig() discovery.Config {
-	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog}
+	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog, ErrorLog: errorLog}
 }
 
 func debugLog(message string, args ...any) {
 	g.Log().Debug(context.Background(), append([]any{message}, args...)...)
+}
+
+func errorLog(message string, args ...any) {
+	g.Log().Error(context.Background(), append([]any{message}, args...)...)
 }

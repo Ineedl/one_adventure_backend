@@ -9,6 +9,7 @@ import (
 
 	"github.com/gogf/gf/v2/frame/g"
 	"google.golang.org/grpc"
+	tracekit "one_adventure_observability_trace/trace"
 	userpb "one_adventure_rpc/proto/user"
 	"one_adventure_servicekit/discovery"
 	appconfig "user/internal/config"
@@ -48,8 +49,11 @@ func New(ctx context.Context, jwtConfig appconfig.JWTConfig) (*Server, error) {
 	return newServer(cfg, service, registrar, discoverer), nil
 }
 
+// InstanceID 返回当前服务注册到 etcd 使用的实例唯一标识。
+func (s *Server) InstanceID() string { return s.registrar.InstanceID() }
+
 func newServer(cfg Config, service userpb.UserServiceServer, registrar *discovery.Registrar, discoverer *discovery.Discoverer) *Server {
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(tracekit.UnaryServerInterceptor), grpc.StreamInterceptor(tracekit.StreamServerInterceptor))
 	userpb.RegisterUserServiceServer(grpcServer, service)
 	return &Server{port: cfg.Port, grpcServer: grpcServer, registrar: registrar, discoverer: discoverer, watchServices: cfg.Etcd.WatchServices}
 }

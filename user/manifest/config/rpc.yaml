@@ -1,4 +1,4 @@
-port: 8083
+port: 9002
 etcd:
   endpoints: ["127.0.0.1:2379"]
   dialTimeout: "5s"
@@ -6,5 +6,5 @@ etcd:
   serverName: "user"
   instanceId: ""
   address: "127.0.0.1"
-  httpPort: 8000
+  httpPort: 8904
   watchServices: []

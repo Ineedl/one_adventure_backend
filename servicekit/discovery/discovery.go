@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	tracekit "one_adventure_observability_trace/trace"
+
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -23,9 +25,13 @@ import (
 	"google.golang.org/grpc/resolver/manual"
 )
 
-const RootPrefix = "/one_adventure"
-
-var ErrServiceUnavailable = errors.New("service is unavailable")
+var (
+	ErrServiceUnavailable = errors.New("service is unavailable")
+	// ErrKeyAlreadyExists indicates that an exclusive etcd key is already owned.
+	ErrKeyAlreadyExists = errors.New("etcd key already exists")
+	// ErrLeaseExpired indicates that etcd no longer recognizes a KV lease.
+	ErrLeaseExpired = errors.New("etcd lease expired")
+)
 
 // Instance is the JSON value stored at /one_adventure/<server_name>/<instance_id>.
 type Instance struct {
@@ -49,6 +55,7 @@ type Config struct {
 	Endpoints   []string
 	DialTimeout time.Duration
 	DebugLog    func(message string, args ...any)
+	ErrorLog    func(message string, args ...any)
 }
 
 func (c Config) Validate() error { return c.validate() }
@@ -61,6 +68,9 @@ func (c Config) validate() error {
 		if strings.TrimSpace(endpoint) == "" {
 			return errors.New("etcd endpoint must not be empty")
 		}
+	}
+	if c.DialTimeout <= 0 {
+		return errors.New("etcd dial timeout must be greater than zero")
 	}
 	return nil
 }
@@ -130,9 +140,19 @@ func (r Registration) key() (string, error) {
 
 // Registrar maintains an etcd lease for the local service. It retries until ctx ends.
 type Registrar struct {
-	client       *clientv3.Client
-	registration Registration
-	debugLog     func(message string, args ...any)
+	client         *clientv3.Client
+	registration   Registration
+	requestTimeout time.Duration
+	debugLog       func(message string, args ...any)
+	errorLog       func(message string, args ...any)
+}
+
+// KVLease represents ownership of a key written by Registrar.PutIfAbsent.
+// It reuses the Registrar's etcd client and does not create another connection.
+type KVLease struct {
+	client  *clientv3.Client
+	key     string
+	leaseID clientv3.LeaseID
 }
 
 func NewRegistrar(config Config, registration Registration) (*Registrar, error) {
@@ -144,7 +164,89 @@ func NewRegistrar(config Config, registration Registration) (*Registrar, error) 
 	if err != nil {
 		return nil, fmt.Errorf("create etcd client: %w", err)
 	}
-	return &Registrar{client: client, registration: registration, debugLog: config.DebugLog}, nil
+	return &Registrar{client: client, registration: registration, requestTimeout: config.DialTimeout, debugLog: config.DebugLog, errorLog: config.ErrorLog}, nil
+}
+
+// InstanceID 返回注册器最终使用的服务实例唯一标识。
+func (r *Registrar) InstanceID() string { return r.registration.InstanceID }
+
+// PutIfAbsent atomically writes key when it does not exist and binds the key
+// to a lease. Competing callers for the same key result in exactly one winner.
+func (r *Registrar) PutIfAbsent(ctx context.Context, key, value string, ttl int64) (*KVLease, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, errors.New("etcd key is required")
+	}
+	if ttl <= 0 {
+		return nil, errors.New("etcd lease ttl must be greater than zero")
+	}
+
+	grant, err := r.client.Grant(ctx, ttl)
+	if err != nil {
+		return nil, fmt.Errorf("grant etcd lease: %w", err)
+	}
+	response, err := r.client.Txn(ctx).
+		If(clientv3.Compare(clientv3.Version(key), "=", 0)).
+		Then(clientv3.OpPut(key, value, clientv3.WithLease(grant.ID))).
+		Commit()
+	if err != nil {
+		r.revokeLease(grant.ID)
+		return nil, fmt.Errorf("put exclusive etcd key %q: %w", key, err)
+	}
+	if !response.Succeeded {
+		r.revokeLease(grant.ID)
+		return nil, fmt.Errorf("%w: %s", ErrKeyAlreadyExists, key)
+	}
+	return &KVLease{client: r.client, key: key, leaseID: grant.ID}, nil
+}
+
+func (r *Registrar) revokeLease(leaseID clientv3.LeaseID) {
+	ctx, cancel := context.WithTimeout(context.Background(), r.requestTimeout)
+	defer cancel()
+	_, _ = r.client.Revoke(ctx, leaseID)
+}
+
+func (l *KVLease) Key() string { return l.key }
+
+func (l *KVLease) LeaseID() clientv3.LeaseID { return l.leaseID }
+
+// Renew performs one synchronous renewal of the KV lease.
+func (l *KVLease) Renew(ctx context.Context) error {
+	response, err := l.client.KeepAliveOnce(ctx, l.leaseID)
+	if err != nil {
+		return fmt.Errorf("renew etcd lease for key %q: %w", l.key, err)
+	}
+	if response == nil || response.TTL <= 0 {
+		return fmt.Errorf("%w: %s", ErrLeaseExpired, l.key)
+	}
+	return nil
+}
+
+// KeepAlive continuously renews the KV lease until ctx is canceled or the
+// lease expires.
+func (l *KVLease) KeepAlive(ctx context.Context) error {
+	responses, err := l.client.KeepAlive(ctx, l.leaseID)
+	if err != nil {
+		return fmt.Errorf("start etcd lease keepalive for key %q: %w", l.key, err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case response, ok := <-responses:
+			if !ok || response == nil || response.TTL <= 0 {
+				return fmt.Errorf("%w: %s", ErrLeaseExpired, l.key)
+			}
+		}
+	}
+}
+
+// Release revokes the KV lease, deleting its attached key.
+func (l *KVLease) Release(ctx context.Context) error {
+	if _, err := l.client.Revoke(ctx, l.leaseID); err != nil {
+		return fmt.Errorf("release etcd key %q: %w", l.key, err)
+	}
+	return nil
 }
 
 func (r *Registrar) Run(ctx context.Context) error {
@@ -152,9 +254,13 @@ func (r *Registrar) Run(ctx context.Context) error {
 	key, _ := r.registration.key()
 	value, _ := json.Marshal(r.registration.Instance)
 	for ctx.Err() == nil {
-		lease, err := r.client.Grant(ctx, r.registration.LeaseTTL)
+		grantCtx, cancelGrant := context.WithTimeout(ctx, r.requestTimeout)
+		lease, err := r.client.Grant(grantCtx, r.registration.LeaseTTL)
+		cancelGrant()
 		if err == nil {
-			_, err = r.client.Put(ctx, key, string(value), clientv3.WithLease(lease.ID))
+			putCtx, cancelPut := context.WithTimeout(ctx, r.requestTimeout)
+			_, err = r.client.Put(putCtx, key, string(value), clientv3.WithLease(lease.ID))
+			cancelPut()
 		}
 		if err == nil {
 			r.debug("etcd connection established", "operation", "register")
@@ -172,7 +278,7 @@ func (r *Registrar) Run(ctx context.Context) error {
 			}
 		}
 		if err != nil && ctx.Err() == nil {
-			r.debug("service registration attempt failed", "key", key, "error", err)
+			r.error("service registration attempt failed", "key", key, "error", err)
 		}
 		if ctx.Err() != nil {
 			break
@@ -192,13 +298,21 @@ func (r *Registrar) debug(message string, args ...any) {
 	}
 }
 
+func (r *Registrar) error(message string, args ...any) {
+	if r.errorLog != nil {
+		r.errorLog(message, args...)
+	}
+}
+
 type Discoverer struct {
-	client *clientv3.Client
+	client         *clientv3.Client
+	requestTimeout time.Duration
 
 	mu        sync.RWMutex
 	instances map[string]map[string]Instance
 	clients   map[string]*serviceConnection
 	debugLog  func(message string, args ...any)
+	errorLog  func(message string, args ...any)
 }
 
 type serviceConnection struct {
@@ -211,7 +325,7 @@ func NewDiscoverer(config Config) (*Discoverer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create etcd client: %w", err)
 	}
-	return &Discoverer{client: client, instances: make(map[string]map[string]Instance), clients: make(map[string]*serviceConnection), debugLog: config.DebugLog}, nil
+	return &Discoverer{client: client, requestTimeout: config.DialTimeout, instances: make(map[string]map[string]Instance), clients: make(map[string]*serviceConnection), debugLog: config.DebugLog, errorLog: config.ErrorLog}, nil
 }
 
 // Run first loads each configured service prefix, then watches from its read
@@ -235,8 +349,11 @@ func (d *Discoverer) run(ctx context.Context, serviceNames []string, watchAll bo
 	prefixes := watchPrefixes(serviceNames, watchAll)
 	var group sync.WaitGroup
 	for _, prefix := range prefixes {
-		response, err := d.client.Get(ctx, prefix, clientv3.WithPrefix())
+		getCtx, cancelGet := context.WithTimeout(ctx, d.requestTimeout)
+		response, err := d.client.Get(getCtx, prefix, clientv3.WithPrefix())
+		cancelGet()
 		if err != nil {
+			d.error("initial etcd service discovery failed", "prefix", prefix, "error", err)
 			if ready != nil {
 				ready <- err
 			}
@@ -253,6 +370,7 @@ func (d *Discoverer) run(ctx context.Context, serviceNames []string, watchAll bo
 			defer group.Done()
 			for watchResponse := range d.client.Watch(ctx, prefix, clientv3.WithPrefix(), clientv3.WithRev(revision)) {
 				if watchResponse.Err() != nil {
+					d.error("etcd service watch failed", "prefix", prefix, "error", watchResponse.Err())
 					continue
 				}
 				for _, event := range watchResponse.Events {
@@ -274,6 +392,12 @@ func (d *Discoverer) run(ctx context.Context, serviceNames []string, watchAll bo
 	group.Wait()
 	d.Close()
 	return ctx.Err()
+}
+
+func (d *Discoverer) error(message string, args ...any) {
+	if d.errorLog != nil {
+		d.errorLog(message, args...)
+	}
 }
 
 func watchPrefixes(names []string, watchAll bool) []string {
@@ -362,7 +486,11 @@ func (d *Discoverer) Connection(serviceName string) (grpc.ClientConnInterface, e
 	}
 	scheme := "one-adventure-" + strings.ReplaceAll(name, "_", "-")
 	manualResolver := manual.NewBuilderWithScheme(scheme)
-	connection, err := grpc.NewClient(scheme+":///"+name, grpc.WithResolvers(manualResolver), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`))
+	connection, err := grpc.NewClient(scheme+":///"+name,
+		grpc.WithResolvers(manualResolver), grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
+		grpc.WithUnaryInterceptor(tracekit.UnaryClientInterceptor), grpc.WithStreamInterceptor(tracekit.StreamClientInterceptor),
+	)
 	if err != nil {
 		return nil, err
 	}

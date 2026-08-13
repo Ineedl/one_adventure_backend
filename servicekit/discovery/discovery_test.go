@@ -3,7 +3,19 @@ package discovery
 import (
 	"reflect"
 	"testing"
+	"time"
 )
+
+func TestConfigValidateRequiresPositiveTimeout(t *testing.T) {
+	config := Config{Endpoints: []string{"127.0.0.1:2379"}}
+	if err := config.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want a positive timeout validation error")
+	}
+	config.DialTimeout = time.Second
+	if err := config.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+}
 
 func TestWatchPrefixes(t *testing.T) {
 	tests := []struct {

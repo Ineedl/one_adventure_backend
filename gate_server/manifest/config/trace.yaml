@@ -1,0 +1,13 @@
+trace:
+  enabled: true
+  endpoint: "http://127.0.0.1:4317"
+  insecure: true
+  sampleRatio: 0.1
+log:
+  enabled: true
+  lokiUrl: "http://127.0.0.1:3100"
+  batchSize: 50
+  flushInterval: "1s"
+metric:
+  enabled: true
+  address: ":9091"

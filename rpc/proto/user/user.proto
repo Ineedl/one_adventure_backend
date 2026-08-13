@@ -20,7 +20,7 @@ message UserInfoGetReq{
 }
 
 message UserInfoGetResp{
-  int64 user_id=1;
+  uint64 user_id=1;
 }
 
 message RefreshTokenReq{

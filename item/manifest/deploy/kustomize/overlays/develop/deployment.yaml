@@ -8,3 +8,10 @@ spec:
       containers:
         - name : main
           image: template-single:develop
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://host.docker.internal:4317"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: LOKI_URL
+              value: "http://host.docker.internal:3100"

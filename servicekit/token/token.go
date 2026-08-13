@@ -33,7 +33,7 @@ type userInfoContextKey struct{}
 // UserInfo is the common user identity carried by access tokens and refresh
 // token records. New shared identity fields can be added here later.
 type UserInfo struct {
-	ID       int64  `json:"id"`
+	ID       uint64 `json:"id"`
 	Username string `json:"username"`
 	Status   int    `json:"status"`
 }
@@ -146,7 +146,7 @@ func (g *RS256Generator) Generate(userInfo UserInfo) (string, error) {
 		return "", err
 	}
 	payload, err := json.Marshal(Claims{
-		Subject: strconv.FormatInt(userInfo.ID, 10), UserInfo: userInfo, Issuer: g.issuer,
+		Subject: strconv.FormatUint(userInfo.ID, 10), UserInfo: userInfo, Issuer: g.issuer,
 		IssuedAt: now.Unix(), ExpiresAt: now.Add(g.expire).Unix(),
 	})
 	if err != nil {
@@ -196,7 +196,7 @@ func (v *RS256Verifier) VerifyAndParse(value string) (*Claims, error) {
 	if v.issuer != "" && claims.Issuer != v.issuer {
 		return nil, ErrInvalidToken
 	}
-	if claims.Subject == "" || claims.UserInfo.ID <= 0 || claims.Subject != strconv.FormatInt(claims.UserInfo.ID, 10) ||
+	if claims.Subject == "" || claims.UserInfo.ID <= 0 || claims.Subject != strconv.FormatUint(claims.UserInfo.ID, 10) ||
 		claims.IssuedAt <= 0 || claims.ExpiresAt <= claims.IssuedAt {
 		return nil, ErrInvalidToken
 	}

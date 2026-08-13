@@ -8,6 +8,7 @@ import (
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
+	tracekit "one_adventure_observability_trace/trace"
 )
 
 const serverName = "websocket"
@@ -32,7 +33,7 @@ func New(ctx context.Context) (*Server, error) {
 	server.SetPort(cfg.Port)
 	server.SetDumpRouterMap(false)
 	server.BindHandler(cfg.Path, func(r *ghttp.Request) {
-		handler.ServeHTTP(r.Response.Writer, r.Request)
+		tracekit.HTTPMiddleware("gate_server", handler).ServeHTTP(r.Response.Writer, r.Request)
 	})
 
 	return &Server{server: server, manager: manager}, nil

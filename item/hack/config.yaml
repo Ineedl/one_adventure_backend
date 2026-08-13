@@ -5,7 +5,7 @@ gfcli:
   gen:
     dao:
       - link: "mysql:root:zxc563221659@tcp(127.0.0.1:3306)/one_adventure_item"
-        tables: "item_info,item_instance,item_template,inventory_item"
+        tables: "item_info,item_instance,item_template,inventory_item,inventory_conf"
         descriptionTag: true
 
   docker:

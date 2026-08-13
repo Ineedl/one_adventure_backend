@@ -8,6 +8,9 @@ import (
 
 	"github.com/gogf/gf/v2/frame/g"
 	gorillaws "github.com/gorilla/websocket"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	tracekit "one_adventure_observability_trace/trace"
 )
 
 // Handler upgrades HTTP requests and handles WebSocket messages.
@@ -76,18 +79,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRequest(connection *Connection, request *Request) {
+	ctx := tracekit.ContextWithTraceID(connection.Context(), request.TraceID)
+	ctx = tracekit.EnsureRequestID(ctx, request.RequestID)
+	ctx, span := tracekit.Tracer().Start(ctx, request.Type, trace.WithSpanKind(trace.SpanKindServer), trace.WithAttributes(
+		attribute.String("websocket.connection_id", connection.ID()), attribute.String("websocket.session_id", request.SessionID),
+	))
+	defer span.End()
 	responseType, err := ResponseType(request.Type)
 	if err != nil {
 		return
 	}
 
 	handler := h.manager.requestHandler()
-	response, handlerErr := handler(connection.Context(), connection, request)
+	response, handlerErr := handler(ctx, connection, request)
 	if response == nil {
 		response = &Response{}
 	}
 	response.Type = responseType
 	response.SessionID = request.SessionID
+	response.TraceID = tracekit.TraceID(ctx)
+	response.RequestID = tracekit.RequestID(ctx)
 	if handlerErr != nil {
 		response.Code = http.StatusInternalServerError
 		response.Data, _ = json.Marshal(map[string]string{"error": handlerErr.Error()})

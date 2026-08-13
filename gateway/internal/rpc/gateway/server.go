@@ -18,6 +18,7 @@ var ErrServerStarted = errors.New("gateway discovery is already started")
 // registration RPC; it resolves all backends directly from etcd.
 type Server struct {
 	discoverer *discovery.Discoverer
+	instanceID string
 	mu         sync.Mutex
 	cancel     context.CancelFunc
 	done       chan struct{}
@@ -32,8 +33,15 @@ func New(ctx context.Context) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create service discovery: %w", err)
 	}
-	return &Server{discoverer: discoverer}, nil
+	instanceID := cfg.Etcd.InstanceID
+	if instanceID == "" {
+		instanceID = discovery.DefaultInstanceID(cfg.Etcd.ServerName, fmt.Sprint(cfg.Port))
+	}
+	return &Server{discoverer: discoverer, instanceID: instanceID}, nil
 }
+
+// InstanceID 返回 gateway 当前实例的唯一标识。
+func (s *Server) InstanceID() string { return s.instanceID }
 
 func (s *Server) Start() error {
 	s.mu.Lock()

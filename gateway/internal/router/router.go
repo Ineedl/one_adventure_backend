@@ -6,7 +6,9 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 
+	"one_adventure_gateway/internal/middleware/accesslog"
 	"one_adventure_gateway/internal/middleware/auth"
+	"one_adventure_gateway/internal/middleware/tracing"
 	"one_adventure_gateway/internal/service"
 )
 
@@ -19,7 +21,7 @@ func New(ctx context.Context, resolver service.ServiceResolver) (*ghttp.Server, 
 	server := g.Server()
 	handler := NewHandler(resolver, DefaultRouteTable())
 	server.Group("/", func(group *ghttp.RouterGroup) {
-		group.Middleware(authMiddleware.Handle)
+		group.Middleware(tracing.Handle, accesslog.Handle, authMiddleware.Handle)
 		group.ALL("/*path", handler.Handle)
 	})
 	return server, nil

@@ -3,9 +3,11 @@ package router
 import (
 	"context"
 	"net/http"
+	itempb "one_adventure_rpc/proto/item"
+
+	userpb "one_adventure_rpc/proto/user"
 
 	"google.golang.org/grpc"
-	userpb "one_adventure_rpc/proto/user"
 )
 
 type RouteKey struct {
@@ -36,6 +38,13 @@ func DefaultRouteTable() RouteTable {
 			NewRequest: func() any { return &userpb.RefreshTokenReq{} },
 			Invoke: func(ctx context.Context, connection grpc.ClientConnInterface, request any) (any, error) {
 				return userpb.NewUserServiceClient(connection).RefreshToken(ctx, request.(*userpb.RefreshTokenReq))
+			},
+		},
+		{Service: "item", Version: "v1", Path: "inventory-conf"}: {
+			Method:     http.MethodPost,
+			NewRequest: func() any { return &itempb.InventoryConfGetReq{} },
+			Invoke: func(ctx context.Context, connection grpc.ClientConnInterface, request any) (any, error) {
+				return itempb.NewItemServiceClient(connection).InventoryConfGet(ctx, request.(*itempb.InventoryConfGetReq))
 			},
 		},
 	}

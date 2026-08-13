@@ -59,12 +59,17 @@ func (c Config) validate() error {
 }
 
 func (c Config) discoveryConfig() discovery.Config {
-	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog}
+	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog, ErrorLog: errorLog}
 }
 
 func debugLog(message string, args ...any) {
 	g.Log().Debug(context.Background(), append([]any{message}, args...)...)
 }
+
+func errorLog(message string, args ...any) {
+	g.Log().Error(context.Background(), append([]any{message}, args...)...)
+}
+
 func (c Config) registration() discovery.Registration {
 	return discovery.Registration{ServerName: c.Etcd.ServerName, InstanceID: c.Etcd.InstanceID, LeaseTTL: c.Etcd.LeaseTTL, Instance: discovery.Instance{Address: c.Etcd.Address, GRPCPort: fmt.Sprint(c.Port), HTTPPort: fmt.Sprint(c.Etcd.HTTPPort)}}
 }
