@@ -33,11 +33,14 @@ var (
 	ErrLeaseExpired = errors.New("etcd lease expired")
 )
 
-// Instance is the JSON value stored at /one_adventure/<server_name>/<instance_id>.
+// Instance 是注册到 etcd 的微服务实例信息。
 type Instance struct {
 	Address  string `json:"address"`
 	GRPCPort string `json:"grpc_port"`
 	HTTPPort string `json:"http_port"`
+	Region   string `json:"region,omitempty"`
+	Zone     string `json:"zone,omitempty"`
+	SubZone  string `json:"sub_zone,omitempty"`
 }
 
 func (i Instance) grpcAddress() (string, error) {
@@ -52,10 +55,13 @@ func (i Instance) grpcAddress() (string, error) {
 }
 
 type Config struct {
+	// Endpoints 是 etcd 地址列表；EnvoyAddress 非空时调用方连接本地 Envoy。
 	Endpoints   []string
 	DialTimeout time.Duration
-	DebugLog    func(message string, args ...any)
-	ErrorLog    func(message string, args ...any)
+	// EnvoyAddress enables proxy mode; connections are sent to this local Envoy.
+	EnvoyAddress string
+	DebugLog     func(message string, args ...any)
+	ErrorLog     func(message string, args ...any)
 }
 
 func (c Config) Validate() error { return c.validate() }
@@ -83,6 +89,7 @@ func newClient(config Config) (*clientv3.Client, error) {
 }
 
 type Registration struct {
+	// Registration 描述待写入 etcd 的服务实例和租约参数。
 	ServerName string
 	InstanceID string
 	Instance   Instance
@@ -140,6 +147,7 @@ func (r Registration) key() (string, error) {
 
 // Registrar maintains an etcd lease for the local service. It retries until ctx ends.
 type Registrar struct {
+	// Registrar 通过 etcd 租约维护当前服务的注册信息。
 	client         *clientv3.Client
 	registration   Registration
 	requestTimeout time.Duration
@@ -150,6 +158,7 @@ type Registrar struct {
 // KVLease represents ownership of a key written by Registrar.PutIfAbsent.
 // It reuses the Registrar's etcd client and does not create another connection.
 type KVLease struct {
+	// KVLease 表示一个绑定了 etcd 租约的键。
 	client  *clientv3.Client
 	key     string
 	leaseID clientv3.LeaseID
@@ -305,14 +314,16 @@ func (r *Registrar) error(message string, args ...any) {
 }
 
 type Discoverer struct {
+	// Discoverer 监听 etcd，并维护服务实例或 Envoy 代理连接。
 	client         *clientv3.Client
 	requestTimeout time.Duration
 
-	mu        sync.RWMutex
-	instances map[string]map[string]Instance
-	clients   map[string]*serviceConnection
-	debugLog  func(message string, args ...any)
-	errorLog  func(message string, args ...any)
+	mu           sync.RWMutex
+	instances    map[string]map[string]Instance
+	clients      map[string]*serviceConnection
+	debugLog     func(message string, args ...any)
+	errorLog     func(message string, args ...any)
+	envoyAddress string
 }
 
 type serviceConnection struct {
@@ -325,7 +336,11 @@ func NewDiscoverer(config Config) (*Discoverer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create etcd client: %w", err)
 	}
-	return &Discoverer{client: client, requestTimeout: config.DialTimeout, instances: make(map[string]map[string]Instance), clients: make(map[string]*serviceConnection), debugLog: config.DebugLog, errorLog: config.ErrorLog}, nil
+	envoyAddress := strings.TrimSpace(config.EnvoyAddress)
+	if envoyAddress == "" {
+		envoyAddress = strings.TrimSpace(os.Getenv("ENVOY_ADDRESS"))
+	}
+	return &Discoverer{client: client, requestTimeout: config.DialTimeout, instances: make(map[string]map[string]Instance), clients: make(map[string]*serviceConnection), debugLog: config.DebugLog, errorLog: config.ErrorLog, envoyAddress: envoyAddress}, nil
 }
 
 // Run first loads each configured service prefix, then watches from its read
@@ -478,11 +493,19 @@ func (d *Discoverer) Connection(serviceName string) (grpc.ClientConnInterface, e
 	name := strings.ToLower(strings.TrimSpace(serviceName))
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if len(d.instances[name]) == 0 {
+	if d.envoyAddress == "" && len(d.instances[name]) == 0 {
 		return nil, fmt.Errorf("%w: %s", ErrServiceUnavailable, name)
 	}
 	if connection := d.clients[name]; connection != nil {
 		return connection.connection, nil
+	}
+	if d.envoyAddress != "" {
+		connection, err := grpc.NewClient(d.envoyAddress, grpc.WithAuthority(name), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(tracekit.UnaryClientInterceptor), grpc.WithStreamInterceptor(tracekit.StreamClientInterceptor))
+		if err != nil {
+			return nil, err
+		}
+		d.clients[name] = &serviceConnection{connection: connection}
+		return connection, nil
 	}
 	scheme := "one-adventure-" + strings.ReplaceAll(name, "_", "-")
 	manualResolver := manual.NewBuilderWithScheme(scheme)
@@ -501,7 +524,7 @@ func (d *Discoverer) Connection(serviceName string) (grpc.ClientConnInterface, e
 
 func (d *Discoverer) updateConnectionLocked(service string) {
 	connection := d.clients[service]
-	if connection == nil {
+	if connection == nil || connection.resolver == nil {
 		return
 	}
 	addresses := make([]resolver.Address, 0, len(d.instances[service]))

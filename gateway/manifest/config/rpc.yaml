@@ -1,10 +1,12 @@
 port: 8081
+# 设置后 Gateway 通过本地 Envoy 调用其他微服务；为空时使用 etcd 直连。
+envoyAddress: "127.0.0.1:15001"
 etcd:
   endpoints: ["127.0.0.1:2379"]
   dialTimeout: "5s"
   leaseTtl: 10
   serverName: "gateway"
   instanceId: ""
-  address: "127.0.0.1"
+  address: "host.docker.internal"
   httpPort: 8000
   watchServices: []

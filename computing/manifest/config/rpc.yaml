@@ -5,6 +5,6 @@ etcd:
   leaseTtl: 10
   serverName: "computing"
   instanceId: ""
-  address: "127.0.0.1"
+  address: "192.168.65.254"
   httpPort: 8903
   watchServices: []

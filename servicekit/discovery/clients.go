@@ -21,6 +21,7 @@ var clientFactories = map[string]ClientFactory{
 	"user": func(connection grpc.ClientConnInterface) any { return userpb.NewUserServiceClient(connection) },
 }
 
+// Client 根据服务名获取对应的生成代码 gRPC 客户端。
 func (d *Discoverer) Client(serverName string) (any, error) {
 	name := strings.ToLower(strings.TrimSpace(serverName))
 	factory, ok := clientFactories[name]

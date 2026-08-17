@@ -1,0 +1,10 @@
+# xDS 控制面配置。
+etcd:
+  endpoints:
+    - http://127.0.0.1:2379
+  dialTimeout: 5s
+listen:
+  address: 0.0.0.0
+  port: 18000
+# 留空表示监控 /one_adventure/ 下的全部服务。
+services: []

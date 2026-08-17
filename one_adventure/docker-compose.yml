@@ -1,0 +1,56 @@
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    command: /usr/local/bin/etcd --advertise-client-urls=http://0.0.0.0:2379 --listen-client-urls=http://0.0.0.0:2379
+    ports: ["2379:2379"]
+  envoy:
+    image: envoyproxy/envoy:v1.31-latest
+    depends_on: [etcd]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes: ["./envoy.yaml:/etc/envoy/envoy.yaml:ro"]
+    ports: ["15001:15001", "9901:9901"]
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command:
+      - "-config.file=/etc/tempo.yaml"
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    command:
+      - "-config.file=/etc/loki/local-config.yaml"
+      - "-server.http-listen-address=0.0.0.0"
+    ports:
+      - "0.0.0.0:3100:3100"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.listen-address=0.0.0.0:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "0.0.0.0:9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - tempo
+
+volumes:
+  prometheus-data:

@@ -5,6 +5,6 @@ etcd:
   leaseTtl: 10
   serverName: "item"
   instanceId: ""
-  address: "127.0.0.1"
+  address: "host.docker.internal"
   httpPort: 8905
   watchServices: []

@@ -5,5 +5,5 @@ etcd:
   leaseTtl: 10
   serverName: "server_manager"
   instanceId: ""
-  address: "127.0.0.1"
+  address: "host.docker.internal"
   httpPort: 8000

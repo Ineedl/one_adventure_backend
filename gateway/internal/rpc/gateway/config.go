@@ -13,8 +13,9 @@ import (
 
 // Config contains the gateway RPC configuration loaded from rpc.yaml.
 type Config struct {
-	Port int        `json:"port"`
-	Etcd EtcdConfig `json:"etcd"`
+	Port         int        `json:"port"`
+	EnvoyAddress string     `json:"envoyAddress"`
+	Etcd         EtcdConfig `json:"etcd"`
 }
 
 type EtcdConfig struct {
@@ -56,7 +57,7 @@ func (c Config) validate() error {
 }
 
 func (c Config) discoveryConfig() discovery.Config {
-	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog, ErrorLog: errorLog}
+	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, EnvoyAddress: c.EnvoyAddress, DebugLog: debugLog, ErrorLog: errorLog}
 }
 
 func debugLog(message string, args ...any) {
