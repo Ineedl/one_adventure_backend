@@ -22,7 +22,6 @@ type Server struct {
 	grpcServer       *grpc.Server
 	registrar        *discovery.Registrar
 	discoverer       *discovery.Discoverer
-	watchServices    []string
 	mu               sync.RWMutex
 	listener         net.Listener
 	registrationStop context.CancelFunc
@@ -55,7 +54,7 @@ func (s *Server) InstanceID() string { return s.registrar.InstanceID() }
 func newServer(cfg Config, service userpb.UserServiceServer, registrar *discovery.Registrar, discoverer *discovery.Discoverer) *Server {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(tracekit.UnaryServerInterceptor), grpc.StreamInterceptor(tracekit.StreamServerInterceptor))
 	userpb.RegisterUserServiceServer(grpcServer, service)
-	return &Server{port: cfg.Port, grpcServer: grpcServer, registrar: registrar, discoverer: discoverer, watchServices: cfg.Etcd.WatchServices}
+	return &Server{port: cfg.Port, grpcServer: grpcServer, registrar: registrar, discoverer: discoverer}
 }
 
 func (s *Server) Start() error {
@@ -88,9 +87,6 @@ func (s *Server) Start() error {
 				g.Log().Errorf(context.Background(), "user service registrar stopped unexpectedly: %v", runErr)
 			}
 		}()
-		if s.discoverer != nil {
-			go func() { _ = s.discoverer.Run(registrationCtx, s.watchServices) }()
-		}
 	}
 	g.Log().Infof(context.Background(), "user rpc server listening on port %d", s.port)
 	return nil

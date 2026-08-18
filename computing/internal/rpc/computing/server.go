@@ -18,11 +18,10 @@ var ErrServerStarted = errors.New("computing rpc server is already started")
 
 // Server owns the computing gRPC server and its TCP listener.
 type Server struct {
-	port          int
-	grpcServer    *grpc.Server
-	registrar     *discovery.Registrar
-	discoverer    *discovery.Discoverer
-	watchServices []string
+	port       int
+	grpcServer *grpc.Server
+	registrar  *discovery.Registrar
+	discoverer *discovery.Discoverer
 
 	mu               sync.RWMutex
 	listener         net.Listener
@@ -56,7 +55,7 @@ func newServer(cfg Config, service computingpb.ComputingServiceServer, registrar
 	return &Server{
 		port:       cfg.Port,
 		grpcServer: grpcServer,
-		registrar:  registrar, discoverer: discoverer, watchServices: cfg.Etcd.WatchServices,
+		registrar:  registrar, discoverer: discoverer,
 	}
 }
 
@@ -94,9 +93,6 @@ func (s *Server) Start() error {
 				g.Log().Errorf(context.Background(), "computing service registrar stopped unexpectedly: %v", runErr)
 			}
 		}(registrationDone)
-		if s.discoverer != nil {
-			go func() { _ = s.discoverer.Run(registrationCtx, s.watchServices) }()
-		}
 	}
 	g.Log().Infof(context.Background(), "computing rpc server listening on port %d", s.port)
 	return nil

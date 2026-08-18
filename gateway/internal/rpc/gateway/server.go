@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/gogf/gf/v2/frame/g"
 	"google.golang.org/grpc"
 	"one_adventure_gateway/internal/service"
 	"one_adventure_servicekit/discovery"
@@ -14,8 +13,7 @@ import (
 
 var ErrServerStarted = errors.New("gateway discovery is already started")
 
-// Server owns gateway service discovery. Gateway no longer exposes a service
-// registration RPC; it resolves all backends directly from etcd.
+// Server owns Gateway's Envoy-backed service connections.
 type Server struct {
 	discoverer *discovery.Discoverer
 	instanceID string
@@ -54,9 +52,9 @@ func (s *Server) Start() error {
 	ready := make(chan error, 1)
 	go func() {
 		defer close(s.done)
-		if err := s.discoverer.RunAllReady(ctx, ready); err != nil && !errors.Is(err, context.Canceled) {
-			g.Log().Errorf(context.Background(), "gateway service discovery stopped: %v", err)
-		}
+		ready <- nil
+		<-ctx.Done()
+		s.discoverer.Close()
 	}()
 	if err := <-ready; err != nil {
 		cancel()

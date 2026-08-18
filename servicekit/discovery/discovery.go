@@ -33,6 +33,8 @@ var (
 	ErrLeaseExpired = errors.New("etcd lease expired")
 )
 
+const DefaultEnvoyAddress = "127.0.0.1:15001"
+
 // Instance 是注册到 etcd 的微服务实例信息。
 type Instance struct {
 	Address  string `json:"address"`
@@ -332,32 +334,35 @@ type serviceConnection struct {
 }
 
 func NewDiscoverer(config Config) (*Discoverer, error) {
-	client, err := newClient(config)
-	if err != nil {
-		return nil, fmt.Errorf("create etcd client: %w", err)
-	}
 	envoyAddress := strings.TrimSpace(config.EnvoyAddress)
 	if envoyAddress == "" {
 		envoyAddress = strings.TrimSpace(os.Getenv("ENVOY_ADDRESS"))
 	}
-	return &Discoverer{client: client, requestTimeout: config.DialTimeout, instances: make(map[string]map[string]Instance), clients: make(map[string]*serviceConnection), debugLog: config.DebugLog, errorLog: config.ErrorLog, envoyAddress: envoyAddress}, nil
+	if envoyAddress == "" {
+		envoyAddress = DefaultEnvoyAddress
+	}
+	return &Discoverer{instances: make(map[string]map[string]Instance), clients: make(map[string]*serviceConnection), debugLog: config.DebugLog, errorLog: config.ErrorLog, envoyAddress: envoyAddress}, nil
 }
 
 // Run first loads each configured service prefix, then watches from its read
 // revision. An empty serviceNames list watches nothing.
 func (d *Discoverer) Run(ctx context.Context, serviceNames []string) error {
-	return d.run(ctx, serviceNames, false, nil)
+	<-ctx.Done()
+	d.Close()
+	return ctx.Err()
 }
 
 // RunReady is Run with a readiness notification sent after the initial etcd
 // snapshot has been loaded and watches have been installed.
 func (d *Discoverer) RunReady(ctx context.Context, serviceNames []string, ready chan<- error) error {
-	return d.run(ctx, serviceNames, false, ready)
+	ready <- nil
+	return d.Run(ctx, serviceNames)
 }
 
 // RunAllReady watches every service below RootPrefix. It is intended for the gateway.
 func (d *Discoverer) RunAllReady(ctx context.Context, ready chan<- error) error {
-	return d.run(ctx, nil, true, ready)
+	ready <- nil
+	return d.Run(ctx, nil)
 }
 
 func (d *Discoverer) run(ctx context.Context, serviceNames []string, watchAll bool, ready chan<- error) error {
@@ -487,38 +492,23 @@ func (d *Discoverer) debug(message string, args ...any) {
 	}
 }
 
-// Connection returns a gRPC connection whose resolver receives all currently
-// registered instances, enabling round_robin client-side load balancing.
+// Connection returns a per-service connection to Envoy. The service name is
+// sent as HTTP/2 :authority so Envoy can select the matching xDS cluster.
 func (d *Discoverer) Connection(serviceName string) (grpc.ClientConnInterface, error) {
 	name := strings.ToLower(strings.TrimSpace(serviceName))
+	if name == "" {
+		return nil, fmt.Errorf("service name is required")
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.envoyAddress == "" && len(d.instances[name]) == 0 {
-		return nil, fmt.Errorf("%w: %s", ErrServiceUnavailable, name)
-	}
 	if connection := d.clients[name]; connection != nil {
 		return connection.connection, nil
 	}
-	if d.envoyAddress != "" {
-		connection, err := grpc.NewClient(d.envoyAddress, grpc.WithAuthority(name), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(tracekit.UnaryClientInterceptor), grpc.WithStreamInterceptor(tracekit.StreamClientInterceptor))
-		if err != nil {
-			return nil, err
-		}
-		d.clients[name] = &serviceConnection{connection: connection}
-		return connection, nil
-	}
-	scheme := "one-adventure-" + strings.ReplaceAll(name, "_", "-")
-	manualResolver := manual.NewBuilderWithScheme(scheme)
-	connection, err := grpc.NewClient(scheme+":///"+name,
-		grpc.WithResolvers(manualResolver), grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig":[{"round_robin":{}}]}`),
-		grpc.WithUnaryInterceptor(tracekit.UnaryClientInterceptor), grpc.WithStreamInterceptor(tracekit.StreamClientInterceptor),
-	)
+	connection, err := grpc.NewClient(d.envoyAddress, grpc.WithAuthority(name), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(tracekit.UnaryClientInterceptor), grpc.WithStreamInterceptor(tracekit.StreamClientInterceptor))
 	if err != nil {
 		return nil, err
 	}
-	d.clients[name] = &serviceConnection{connection: connection, resolver: manualResolver}
-	d.updateConnectionLocked(name)
+	d.clients[name] = &serviceConnection{connection: connection}
 	return connection, nil
 }
 

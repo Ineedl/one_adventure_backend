@@ -19,14 +19,13 @@ type Config struct {
 }
 
 type EtcdConfig struct {
-	Endpoints     []string      `json:"endpoints"`
-	DialTimeout   time.Duration `json:"dialTimeout"`
-	LeaseTTL      int64         `json:"leaseTtl"`
-	ServerName    string        `json:"serverName"`
-	InstanceID    string        `json:"instanceId"`
-	Address       string        `json:"address"`
-	HTTPPort      int           `json:"httpPort"`
-	WatchServices []string      `json:"watchServices"`
+	Endpoints   []string      `json:"endpoints"`
+	DialTimeout time.Duration `json:"dialTimeout"`
+	LeaseTTL    int64         `json:"leaseTtl"`
+	ServerName  string        `json:"serverName"`
+	InstanceID  string        `json:"instanceId"`
+	Address     string        `json:"address"`
+	HTTPPort    int           `json:"httpPort"`
 }
 
 func loadConfig(ctx context.Context) (Config, error) {

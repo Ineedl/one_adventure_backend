@@ -17,11 +17,10 @@ import (
 var ErrServerStarted = errors.New("item rpc server is already started")
 
 type Server struct {
-	port          int
-	grpcServer    *grpc.Server
-	registrar     *discovery.Registrar
-	discoverer    *discovery.Discoverer
-	watchServices []string
+	port       int
+	grpcServer *grpc.Server
+	registrar  *discovery.Registrar
+	discoverer *discovery.Discoverer
 
 	mu               sync.RWMutex
 	listener         net.Listener
@@ -51,7 +50,7 @@ func (s *Server) InstanceID() string { return s.registrar.InstanceID() }
 func newServer(config Config, service itempb.ItemServiceServer, registrar *discovery.Registrar, discoverer *discovery.Discoverer) *Server {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(tracekit.UnaryServerInterceptor), grpc.StreamInterceptor(tracekit.StreamServerInterceptor))
 	itempb.RegisterItemServiceServer(grpcServer, service)
-	return &Server{port: config.Port, grpcServer: grpcServer, registrar: registrar, discoverer: discoverer, watchServices: config.Etcd.WatchServices}
+	return &Server{port: config.Port, grpcServer: grpcServer, registrar: registrar, discoverer: discoverer}
 }
 
 func (s *Server) Start() error {
@@ -79,7 +78,6 @@ func (s *Server) Start() error {
 			g.Log().Errorf(context.Background(), "item service registrar stopped unexpectedly: %v", runErr)
 		}
 	}(registrationDone)
-	go func() { _ = s.discoverer.Run(registrationCtx, s.watchServices) }()
 	g.Log().Infof(context.Background(), "item rpc server listening on port %d", s.port)
 	return nil
 }

@@ -11,19 +11,19 @@ import (
 )
 
 type Config struct {
-	Port int        `json:"port"`
-	Etcd EtcdConfig `json:"etcd"`
+	Port         int        `json:"port"`
+	EnvoyAddress string     `json:"envoyAddress"`
+	Etcd         EtcdConfig `json:"etcd"`
 }
 
 type EtcdConfig struct {
-	Endpoints     []string      `json:"endpoints"`
-	DialTimeout   time.Duration `json:"dialTimeout"`
-	LeaseTTL      int64         `json:"leaseTtl"`
-	ServerName    string        `json:"serverName"`
-	InstanceID    string        `json:"instanceId"`
-	Address       string        `json:"address"`
-	HTTPPort      int           `json:"httpPort"`
-	WatchServices []string      `json:"watchServices"`
+	Endpoints   []string      `json:"endpoints"`
+	DialTimeout time.Duration `json:"dialTimeout"`
+	LeaseTTL    int64         `json:"leaseTtl"`
+	ServerName  string        `json:"serverName"`
+	InstanceID  string        `json:"instanceId"`
+	Address     string        `json:"address"`
+	HTTPPort    int           `json:"httpPort"`
 }
 
 func loadConfig(ctx context.Context) (Config, error) {
@@ -59,7 +59,7 @@ func (c Config) validate() error {
 }
 
 func (c Config) discoveryConfig() discovery.Config {
-	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, DebugLog: debugLog, ErrorLog: errorLog}
+	return discovery.Config{Endpoints: c.Etcd.Endpoints, DialTimeout: c.Etcd.DialTimeout, EnvoyAddress: c.EnvoyAddress, DebugLog: debugLog, ErrorLog: errorLog}
 }
 
 func debugLog(message string, args ...any) {

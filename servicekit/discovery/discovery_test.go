@@ -17,6 +17,21 @@ func TestConfigValidateRequiresPositiveTimeout(t *testing.T) {
 	}
 }
 
+func TestNewDiscovererUsesEnvoy(t *testing.T) {
+	t.Setenv("ENVOY_ADDRESS", "")
+	discoverer, err := NewDiscoverer(Config{})
+	if err != nil {
+		t.Fatalf("NewDiscoverer() error = %v", err)
+	}
+	defer discoverer.Close()
+	if discoverer.envoyAddress != DefaultEnvoyAddress {
+		t.Fatalf("envoy address = %q, want %q", discoverer.envoyAddress, DefaultEnvoyAddress)
+	}
+	if discoverer.client != nil {
+		t.Fatal("discoverer unexpectedly created an etcd client")
+	}
+}
+
 func TestWatchPrefixes(t *testing.T) {
 	tests := []struct {
 		name     string

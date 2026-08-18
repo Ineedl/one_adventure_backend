@@ -9,4 +9,3 @@ etcd:
   instanceId: ""
   address: "host.docker.internal"
   httpPort: 8000
-  watchServices: []

@@ -1,4 +1,5 @@
 port: 9002
+envoyAddress: "127.0.0.1:15001"
 etcd:
   endpoints: ["127.0.0.1:2379"]
   dialTimeout: "5s"
@@ -7,4 +8,3 @@ etcd:
   instanceId: ""
   address: "192.168.65.254"
   httpPort: 8904
-  watchServices: []
