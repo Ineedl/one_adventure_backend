@@ -21,16 +21,18 @@ type PromotionInventoryDao struct {
 
 // PromotionInventoryColumns defines and stores column names for the table promotion_inventory.
 type PromotionInventoryColumns struct {
-	ProductId string //
-	Stock     string //
-	Locked    string //
+	ProductId   string //
+	Stock       string //
+	Locked      string //
+	PromotionId string //
 }
 
 // promotionInventoryColumns holds the columns for the table promotion_inventory.
 var promotionInventoryColumns = PromotionInventoryColumns{
-	ProductId: "product_id",
-	Stock:     "stock",
-	Locked:    "locked",
+	ProductId:   "product_id",
+	Stock:       "stock",
+	Locked:      "locked",
+	PromotionId: "promotion_id",
 }
 
 // NewPromotionInventoryDao creates and returns a new DAO object for table data access.

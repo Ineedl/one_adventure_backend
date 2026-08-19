@@ -10,8 +10,9 @@ import (
 
 // PromotionInventory is the golang structure of table promotion_inventory for DAO operations like Where/Data.
 type PromotionInventory struct {
-	g.Meta    `orm:"table:promotion_inventory, do:true"`
-	ProductId interface{} //
-	Stock     interface{} //
-	Locked    interface{} //
+	g.Meta      `orm:"table:promotion_inventory, do:true"`
+	ProductId   interface{} //
+	Stock       interface{} //
+	Locked      interface{} //
+	PromotionId interface{} //
 }

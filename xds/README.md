@@ -3,9 +3,9 @@
 xDS 作为宿主机上的独立进程运行，不由 Docker Compose 管理。它读取 etcd 注册数据，并向 Envoy 提供 CDS/EDS 配置。
 
 ```bash
-docker compose -f one_adventure/docker-compose.yml up -d etcd
+docker compose -f one_adventure/one_adventure.yml up -d etcd
 cd xds && go run ./cmd/xds
-docker compose -f one_adventure/docker-compose.yml up -d envoy
+docker compose -f one_adventure/one_adventure.yml up -d envoy
 ```
 
 xDS 默认监听 `0.0.0.0:18000`，Envoy 通过 `host.docker.internal:18000` 连接宿主机上的 xDS。

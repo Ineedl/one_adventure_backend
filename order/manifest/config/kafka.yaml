@@ -1,0 +1,4 @@
+brokers: ["127.0.0.1:9092"]
+group: "one-adventure-order"
+maxWait: "1s"
+readTimeout: "10s"

@@ -21,18 +21,28 @@ type PromotionProductDao struct {
 
 // PromotionProductColumns defines and stores column names for the table promotion_product.
 type PromotionProductColumns struct {
-	PromotionId string //
-	ProductId   string //
-	Price       string //
-	Stock       string //
+	PromotionId  string //
+	ProductId    string //
+	Price        string //
+	Stock        string //
+	CurrencyType string // 货币类型
+	LimitType    string // 限购类型 0:不限购 1:针对用户的数量限购
+	LimitNum     string // 限购数量
+	CreateTime   string //
+	UpdateTime   string //
 }
 
 // promotionProductColumns holds the columns for the table promotion_product.
 var promotionProductColumns = PromotionProductColumns{
-	PromotionId: "promotion_id",
-	ProductId:   "product_id",
-	Price:       "price",
-	Stock:       "stock",
+	PromotionId:  "promotion_id",
+	ProductId:    "product_id",
+	Price:        "price",
+	Stock:        "stock",
+	CurrencyType: "currency_type",
+	LimitType:    "limit_type",
+	LimitNum:     "limit_num",
+	CreateTime:   "create_time",
+	UpdateTime:   "update_time",
 }
 
 // NewPromotionProductDao creates and returns a new DAO object for table data access.

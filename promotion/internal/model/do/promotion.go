@@ -15,7 +15,9 @@ type Promotion struct {
 	PromotionId interface{} //
 	Name        interface{} //
 	Type        interface{} //
-	Status      interface{} //
+	Status      interface{} // 1:启用 0:停止
 	StartTime   *gtime.Time //
 	EndTime     *gtime.Time //
+	CreateTime  *gtime.Time //
+	UpdateTime  *gtime.Time //
 }

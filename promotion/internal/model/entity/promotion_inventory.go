@@ -6,7 +6,8 @@ package entity
 
 // PromotionInventory is the golang structure for table promotion_inventory.
 type PromotionInventory struct {
-	ProductId uint64 `json:"productId" orm:"product_id" description:""` //
-	Stock     int    `json:"stock"     orm:"stock"      description:""` //
-	Locked    int    `json:"locked"    orm:"locked"     description:""` //
+	ProductId   uint64 `json:"productId"   orm:"product_id"   description:""` //
+	Stock       int    `json:"stock"       orm:"stock"        description:""` //
+	Locked      int    `json:"locked"      orm:"locked"       description:""` //
+	PromotionId uint64 `json:"promotionId" orm:"promotion_id" description:""` //
 }

@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package promotion;
+
+option go_package = "one_adventure_rpc/proto/promotion;promotion";
+
+// SeckillReq requests an atomic promotion-stock deduction.
+message SeckillReq {
+  uint64 promotion_id = 1; // 促销活动 ID
+  uint64 product_id = 2; // 促销产品 ID
+  int32 pay_num = 3; // 实际付款数量
+  int64 price = 4; // 价格，使用货币最小单位
+  int32 currency_type = 5; // 货币类型
+  string request_id = 6; // 贯穿秒杀、订单创建和支付的业务请求 ID
+}
+
+message SeckillResp {
+  bool success = 1;
+}
+
+// PromotionStockRefreshReq selects promotion products whose valid stock is
+// written to Redis. Both fields absent means all currently valid promotions;
+// only promotion_id means all valid products in that promotion.
+message PromotionStockRefreshReq {
+  optional uint64 promotion_id = 1;
+  optional uint64 product_id = 2;
+}
+
+message PromotionStockRefreshResp {
+  int32 refreshed_count = 1;
+}
+
+service PromotionService {
+  // Seckill gets the user identity from RPC context, atomically
+  // validates limits and deducts stock, then publishes the result to the
+  // promotion_order_create Kafka topic.
+  rpc Seckill(SeckillReq) returns (SeckillResp);
+
+  // PromotionStockRefresh writes valid promotion-product stock to Redis under
+  // promotion:{promotion_id}:{product_id}.
+  rpc PromotionStockRefresh(PromotionStockRefreshReq) returns (PromotionStockRefreshResp);
+}

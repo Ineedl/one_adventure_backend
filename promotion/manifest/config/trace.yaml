@@ -1,0 +1,5 @@
+trace:
+  enabled: true
+  endpoint: "127.0.0.1:4317"
+  insecure: true
+  sampleRatio: 1

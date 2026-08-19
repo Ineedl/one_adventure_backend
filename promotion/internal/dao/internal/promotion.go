@@ -24,9 +24,11 @@ type PromotionColumns struct {
 	PromotionId string //
 	Name        string //
 	Type        string //
-	Status      string //
+	Status      string // 1:启用 0:停止
 	StartTime   string //
 	EndTime     string //
+	CreateTime  string //
+	UpdateTime  string //
 }
 
 // promotionColumns holds the columns for the table promotion.
@@ -37,6 +39,8 @@ var promotionColumns = PromotionColumns{
 	Status:      "status",
 	StartTime:   "start_time",
 	EndTime:     "end_time",
+	CreateTime:  "create_time",
+	UpdateTime:  "update_time",
 }
 
 // NewPromotionDao creates and returns a new DAO object for table data access.

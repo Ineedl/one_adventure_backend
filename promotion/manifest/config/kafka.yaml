@@ -1,0 +1,3 @@
+brokers: ["127.0.0.1:9092"]
+group: "one-adventure-promotion"
+writeTimeout: "10s"
