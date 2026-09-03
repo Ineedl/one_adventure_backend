@@ -17,8 +17,10 @@ import (
 	orderpb "one_adventure_rpc/proto/order"
 	kafkakit "one_adventure_servicekit/kafka"
 	"order/internal/compensation"
+	"order/internal/consumer/payreport"
 	"order/internal/consumer/promotionorder"
 	"order/internal/controller/hello"
+	"order/internal/refund"
 	orderrpc "order/internal/rpc/order"
 	ordertimeout "order/internal/timeout"
 )
@@ -59,10 +61,21 @@ var (
 			compensationProducer := kafkakit.NewProducer(kafkaConfig)
 			defer compensationProducer.Close()
 			compensationPublisher := compensation.New(compensationProducer)
+			refundPublisher := refund.New(compensationProducer)
+			payReportConsumer, err := payreport.New(ctx, refundPublisher, compensationPublisher)
+			if err != nil {
+				return err
+			}
+			defer payReportConsumer.Close()
 			grpcService := orderrpc.NewService(compensationPublisher)
 			go func() {
 				if runErr := consumer.Run(consumerCtx); runErr != nil && !errors.Is(runErr, context.Canceled) {
 					g.Log().Errorf(context.Background(), "promotion order consumer stopped: %v", runErr)
+				}
+			}()
+			go func() {
+				if runErr := payReportConsumer.Run(consumerCtx); runErr != nil && !errors.Is(runErr, context.Canceled) {
+					g.Log().Errorf(context.Background(), "pay report consumer stopped: %v", runErr)
 				}
 			}()
 			grpcServer := grpc.NewServer()

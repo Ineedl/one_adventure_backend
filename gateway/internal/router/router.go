@@ -8,6 +8,7 @@ import (
 
 	"one_adventure_gateway/internal/middleware/accesslog"
 	"one_adventure_gateway/internal/middleware/auth"
+	"one_adventure_gateway/internal/middleware/ratelimit"
 	"one_adventure_gateway/internal/middleware/tracing"
 	"one_adventure_gateway/internal/service"
 )
@@ -18,10 +19,21 @@ func New(ctx context.Context, resolver service.ServiceResolver) (*ghttp.Server, 
 	if err != nil {
 		return nil, err
 	}
+	rateLimitMiddleware, err := ratelimit.New(ctx)
+	if err != nil {
+		return nil, err
+	}
 	server := g.Server()
 	handler := NewHandler(resolver, DefaultRouteTable())
 	server.Group("/", func(group *ghttp.RouterGroup) {
-		group.Middleware(tracing.Handle, accesslog.Handle, authMiddleware.Handle)
+		group.Middleware(
+			tracing.Handle,
+			accesslog.Handle,
+			rateLimitMiddleware.TokenBucket,
+			rateLimitMiddleware.LeakyBucket,
+			authMiddleware.Handle,
+			rateLimitMiddleware.UserWindow,
+		)
 		group.ALL("/*path", handler.Handle)
 	})
 	return server, nil

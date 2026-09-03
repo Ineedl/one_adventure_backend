@@ -1,0 +1,2 @@
+port: 9004
+etcd: {endpoints: ["etcd:2379"], dialTimeout: "5s", leaseTtl: 10, serverName: "server_manager", instanceId: "", address: "server-manager", httpPort: 8000}

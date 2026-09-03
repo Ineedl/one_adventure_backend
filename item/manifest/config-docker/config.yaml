@@ -1,0 +1,4 @@
+server: {address: ":8905", openapiPath: "/api.json", swaggerPath: "/swagger"}
+logger: {level: "all", stdout: true}
+database:
+  default: {link: "mysql:root:zxc563221659@tcp(host.docker.internal:3306)/one_adventure_item"}

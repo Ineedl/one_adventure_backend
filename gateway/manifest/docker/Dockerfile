@@ -6,6 +6,7 @@ FROM loads/alpine:3.8
 
 ENV WORKDIR                 /app
 ADD resource                $WORKDIR/
+ADD key                     $WORKDIR/key/
 ADD ./temp/linux_amd64/main $WORKDIR/main
 RUN chmod +x $WORKDIR/main
 

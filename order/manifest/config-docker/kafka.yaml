@@ -1,0 +1,4 @@
+brokers: ["kafka:9092"]
+group: "one-adventure-order"
+maxWait: "1s"
+readTimeout: "10s"

@@ -6,10 +6,17 @@ option go_package = "one_adventure_rpc/proto/order;order";
 
 
 service OrderService {
+	rpc UpdateOrderStatus(UpdateOrderStatusReq) returns (OrderResp);
 	rpc Pay(PayReq) returns (OrderResp);
 	rpc Cancel(CancelReq) returns (OrderResp);
 }
 
+message UpdateOrderStatusReq {
+	string order_no = 1;
+	string request_id = 2;
+	string target_status = 3;
+	string reason = 4;
+}
 message PayReq { string order_no = 1; string request_id = 2; }
 message CancelReq { string order_no = 1; string request_id = 2; }
 message OrderResp { bool success = 1; string order_no = 2; string status = 3; }

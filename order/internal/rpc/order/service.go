@@ -20,11 +20,20 @@ type Service struct {
 }
 
 func NewService(publisher *compensation.Publisher) *Service { return &Service{publisher: publisher} }
+func (s *Service) UpdateOrderStatus(ctx context.Context, req *orderpb.UpdateOrderStatusReq) (*orderpb.OrderResp, error) {
+	target := req.GetTargetStatus()
+	switch target {
+	case orderstate.Paid, orderstate.Canceled, orderstate.Expired:
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "unsupported target_status %q", target)
+	}
+	return s.updateStatus(ctx, req.GetOrderNo(), req.GetRequestId(), target, req.GetReason())
+}
 func (s *Service) Pay(ctx context.Context, req *orderpb.PayReq) (*orderpb.OrderResp, error) {
-	return s.updateStatus(ctx, req.GetOrderNo(), req.GetRequestId(), orderstate.Paid, "")
+	return s.UpdateOrderStatus(ctx, &orderpb.UpdateOrderStatusReq{OrderNo: req.GetOrderNo(), RequestId: req.GetRequestId(), TargetStatus: orderstate.Paid})
 }
 func (s *Service) Cancel(ctx context.Context, req *orderpb.CancelReq) (*orderpb.OrderResp, error) {
-	return s.updateStatus(ctx, req.GetOrderNo(), req.GetRequestId(), orderstate.Canceled, "canceled")
+	return s.UpdateOrderStatus(ctx, &orderpb.UpdateOrderStatusReq{OrderNo: req.GetOrderNo(), RequestId: req.GetRequestId(), TargetStatus: orderstate.Canceled, Reason: "canceled"})
 }
 
 func (s *Service) updateStatus(ctx context.Context, orderNo, requestID, target, reason string) (*orderpb.OrderResp, error) {
@@ -44,6 +53,10 @@ func (s *Service) updateStatus(ctx context.Context, orderNo, requestID, target, 
 	if order.OrderId == 0 {
 		return nil, status.Error(codes.NotFound, "order not found")
 	}
+	// Repeated payment callbacks and cancellation requests are successful no-ops.
+	if order.Status == target {
+		return &orderpb.OrderResp{Success: true, OrderNo: order.OrderNo, Status: target}, nil
+	}
 	if order.Status != orderstate.PendingPay {
 		return nil, status.Errorf(codes.FailedPrecondition, "order status is %s", order.Status)
 	}
@@ -58,7 +71,7 @@ func (s *Service) updateStatus(ctx context.Context, orderNo, requestID, target, 
 	if _, err = g.Redis().ZRem(ctx, ordertimeout.Key, order.OrderNo); err != nil {
 		return nil, status.Errorf(codes.Internal, "remove order timeout: %v", err)
 	}
-	if reason != "" {
+	if reason != "" && s.publisher != nil {
 		if err = s.publisher.Publish(ctx, order, reason); err != nil {
 			return nil, status.Errorf(codes.Unavailable, "publish compensation: %v", err)
 		}

@@ -1,0 +1,10 @@
+port: 9001
+envoyAddress: "envoy:15001"
+etcd:
+  endpoints: ["etcd:2379"]
+  dialTimeout: "5s"
+  leaseTtl: 10
+  serverName: "computing"
+  instanceId: ""
+  address: "computing"
+  httpPort: 8903

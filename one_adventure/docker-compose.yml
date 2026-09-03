@@ -1,11 +1,165 @@
 services:
+  xds:
+    build: {context: ../xds, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/xds:latest
+    container_name: one-adventure-xds
+    restart: unless-stopped
+    volumes: ["../xds/manifest/config-docker/config.yaml:/app/config.yaml:ro"]
+    environment:
+      XDS_CONFIG: /app/config.yaml
+      ETCD_ENDPOINTS: etcd:2379
+    ports: ["18000:18000"]
+    depends_on: [etcd]
+
+  # Application services. Images are produced by each service's build pipeline
+  # (the compose file keeps the runtime wiring and host port allocation here).
+  gateway:
+    build: {context: ../gateway, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/gateway:latest
+    volumes: ["../gateway/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-gateway
+    restart: unless-stopped
+    expose: ["8901"]
+    depends_on: [etcd, envoy]
+    networks: [default, nginx-lab]
+
+  gate-server:
+    build: {context: ../gate_server, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/gate-server:latest
+    volumes: ["../gate_server/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-gate-server
+    restart: unless-stopped
+    expose: ["8902"]
+    depends_on: [etcd]
+
+  computing:
+    build: {context: ../computing, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/computing:latest
+    volumes: ["../computing/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-computing
+    restart: unless-stopped
+    expose: ["8903", "9001"]
+    depends_on: [etcd]
+
+  user:
+    build: {context: ../user, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/user:latest
+    volumes: ["../user/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-user
+    restart: unless-stopped
+    expose: ["8904", "9002"]
+    depends_on: [etcd]
+
+  item:
+    build: {context: ../item, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/item:latest
+    volumes: ["../item/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-item
+    restart: unless-stopped
+    expose: ["8905", "9003"]
+    depends_on: [etcd]
+
+  commerce:
+    build: {context: ../commerce, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/commerce:latest
+    volumes: ["../commerce/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-commerce
+    restart: unless-stopped
+    expose: ["8000"]
+    depends_on: [etcd]
+
+  server-manager:
+    build: {context: ../server_manager, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/server-manager:latest
+    volumes: ["../server_manager/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-server-manager
+    restart: unless-stopped
+    expose: ["8000", "9004"]
+    depends_on: [etcd]
+
+  order:
+    build: {context: ../order, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/order:latest
+    volumes: ["../order/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-order
+    restart: unless-stopped
+    expose: ["8000", "9009"]
+    depends_on: [etcd, kafka]
+
+  pay:
+    build: {context: ../pay, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/pay:latest
+    volumes: ["../pay/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-pay
+    restart: unless-stopped
+    expose: ["8000", "9010"]
+    depends_on: [etcd, kafka]
+
+  promotion:
+    build: {context: ../promotion, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/promotion:latest
+    volumes: ["../promotion/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-promotion
+    restart: unless-stopped
+    expose: ["8000", "9008"]
+    depends_on: [etcd, kafka]
+
+  nginx-lb:
+    image: nginx:1.27-alpine
+    container_name: nginx-lb
+    restart: unless-stopped
+    depends_on:
+      nginx-node-1:
+        condition: service_healthy
+      nginx-node-2:
+        condition: service_healthy
+      nginx-node-3:
+        condition: service_healthy
+    volumes:
+      - ./nginx/lb.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80"
+    networks:
+      - nginx-lab
+
+  nginx-node-1:
+    <<: &nginx-node
+      image: nginx:1.27-alpine
+      restart: unless-stopped
+      depends_on:
+        gateway:
+          condition: service_started
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      volumes:
+        - ./nginx/node.conf:/etc/nginx/nginx.conf:ro
+      healthcheck:
+        test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/nginx-health && nc -z gateway 8901"]
+        interval: 5s
+        timeout: 2s
+        retries: 5
+      networks:
+        - nginx-lab
+    container_name: nginx-node-1
+    hostname: nginx-node-1
+
+  nginx-node-2:
+    <<: *nginx-node
+    container_name: nginx-node-2
+    hostname: nginx-node-2
+
+  nginx-node-3:
+    <<: *nginx-node
+    container_name: nginx-node-3
+    hostname: nginx-node-3
+
   etcd:
     image: quay.io/coreos/etcd:v3.5.18
     command: /usr/local/bin/etcd --advertise-client-urls=http://0.0.0.0:2379 --listen-client-urls=http://0.0.0.0:2379
     ports: ["2379:2379"]
   envoy:
     image: envoyproxy/envoy:v1.31-latest
-    depends_on: [etcd]
+    depends_on: [etcd, xds]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes: ["./envoy.yaml:/etc/envoy/envoy.yaml:ro"]
@@ -74,3 +228,7 @@ services:
 volumes:
   prometheus-data:
   kafka-data:
+
+networks:
+  nginx-lab:
+    name: one-adventure-nginx-lab

@@ -1,0 +1,7 @@
+etcd:
+  endpoints: ["etcd:2379"]
+  dialTimeout: "5s"
+listen:
+  address: "0.0.0.0"
+  port: 18000
+services: ["gateway", "computing", "user", "item", "server_manager", "promotion"]

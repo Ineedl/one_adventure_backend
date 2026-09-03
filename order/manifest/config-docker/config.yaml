@@ -1,0 +1,6 @@
+server: {address: ":8000", openapiPath: "/api.json", swaggerPath: "/swagger"}
+logger: {level: "all", stdout: true}
+database:
+  default: {link: "mysql:root:12345678@tcp(host.docker.internal:3306)/test"}
+redis:
+  default: {address: "host.docker.internal:6379"}

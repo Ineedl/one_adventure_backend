@@ -1,0 +1,14 @@
+tokenBucket:
+  enabled: true
+  capacity: 200
+  rate: 100
+
+leakyBucket:
+  enabled: false
+  capacity: 100
+  rate: 80
+
+userWindow:
+  enabled: true
+  limit: 60
+  window: "1m"

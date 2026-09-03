@@ -1,0 +1,10 @@
+server:
+  address: ":8904"
+  openapiPath: "/api.json"
+  swaggerPath: "/swagger"
+logger: {level: "all", stdout: true}
+jwt: {privateKeyPath: "key/private.pem", publicKeyPath: "key/public.pem", issuer: "one-adventure-user", accessTokenExpire: "24h", refreshTokenExpire: "720h", refreshTokenKeyPrefix: "user:refresh_token:"}
+database:
+  default: {link: "mysql:root:zxc563221659@tcp(host.docker.internal:3306)/one_adventure_user"}
+redis:
+  default: {address: "host.docker.internal:6379", pass: "123456", db: 0}

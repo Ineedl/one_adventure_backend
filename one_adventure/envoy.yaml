@@ -48,7 +48,7 @@ static_resources:
           - lb_endpoints:
               - endpoint:
                   address:
-                    socket_address: { address: host.docker.internal, port_value: 18000 }
+                    socket_address: { address: xds, port_value: 18000 }
 admin:
   address:
     socket_address: { address: 0.0.0.0, port_value: 9901 }

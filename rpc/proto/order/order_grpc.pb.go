@@ -19,14 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	OrderService_Pay_FullMethodName    = "/order.OrderService/Pay"
-	OrderService_Cancel_FullMethodName = "/order.OrderService/Cancel"
+	OrderService_UpdateOrderStatus_FullMethodName = "/order.OrderService/UpdateOrderStatus"
+	OrderService_Pay_FullMethodName               = "/order.OrderService/Pay"
+	OrderService_Cancel_FullMethodName            = "/order.OrderService/Cancel"
 )
 
 // OrderServiceClient is the client API for OrderService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type OrderServiceClient interface {
+	UpdateOrderStatus(ctx context.Context, in *UpdateOrderStatusReq, opts ...grpc.CallOption) (*OrderResp, error)
 	Pay(ctx context.Context, in *PayReq, opts ...grpc.CallOption) (*OrderResp, error)
 	Cancel(ctx context.Context, in *CancelReq, opts ...grpc.CallOption) (*OrderResp, error)
 }
@@ -37,6 +39,15 @@ type orderServiceClient struct {
 
 func NewOrderServiceClient(cc grpc.ClientConnInterface) OrderServiceClient {
 	return &orderServiceClient{cc}
+}
+
+func (c *orderServiceClient) UpdateOrderStatus(ctx context.Context, in *UpdateOrderStatusReq, opts ...grpc.CallOption) (*OrderResp, error) {
+	out := new(OrderResp)
+	err := c.cc.Invoke(ctx, OrderService_UpdateOrderStatus_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *orderServiceClient) Pay(ctx context.Context, in *PayReq, opts ...grpc.CallOption) (*OrderResp, error) {
@@ -61,6 +72,7 @@ func (c *orderServiceClient) Cancel(ctx context.Context, in *CancelReq, opts ...
 // All implementations must embed UnimplementedOrderServiceServer
 // for forward compatibility
 type OrderServiceServer interface {
+	UpdateOrderStatus(context.Context, *UpdateOrderStatusReq) (*OrderResp, error)
 	Pay(context.Context, *PayReq) (*OrderResp, error)
 	Cancel(context.Context, *CancelReq) (*OrderResp, error)
 	mustEmbedUnimplementedOrderServiceServer()
@@ -70,6 +82,9 @@ type OrderServiceServer interface {
 type UnimplementedOrderServiceServer struct {
 }
 
+func (UnimplementedOrderServiceServer) UpdateOrderStatus(context.Context, *UpdateOrderStatusReq) (*OrderResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateOrderStatus not implemented")
+}
 func (UnimplementedOrderServiceServer) Pay(context.Context, *PayReq) (*OrderResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Pay not implemented")
 }
@@ -87,6 +102,24 @@ type UnsafeOrderServiceServer interface {
 
 func RegisterOrderServiceServer(s grpc.ServiceRegistrar, srv OrderServiceServer) {
 	s.RegisterService(&OrderService_ServiceDesc, srv)
+}
+
+func _OrderService_UpdateOrderStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateOrderStatusReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).UpdateOrderStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_UpdateOrderStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).UpdateOrderStatus(ctx, req.(*UpdateOrderStatusReq))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _OrderService_Pay_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -132,6 +165,10 @@ var OrderService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "order.OrderService",
 	HandlerType: (*OrderServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "UpdateOrderStatus",
+			Handler:    _OrderService_UpdateOrderStatus_Handler,
+		},
 		{
 			MethodName: "Pay",
 			Handler:    _OrderService_Pay_Handler,

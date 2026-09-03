@@ -1,0 +1,1 @@
+trace: {enabled: true, endpoint: "http://tempo:4317", insecure: true, sampleRatio: 1}

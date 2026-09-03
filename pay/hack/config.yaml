@@ -4,7 +4,8 @@
 gfcli:
   gen:
     dao:
-      - link: "mysql:root:12345678@tcp(127.0.0.1:3306)/test"
+      - link: "mysql:root:zxc563221659@tcp(127.0.0.1:3306)/one_adventure_commerce"
+        tables: "payment_order,payment_transaction,payment_refund"
         descriptionTag: true
 
   docker:

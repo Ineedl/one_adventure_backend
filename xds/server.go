@@ -137,34 +137,19 @@ func watch(ctx context.Context, ec *clientv3.Client, c cache.SnapshotCache, serv
 			c.SetSnapshot(ctx, envoyNodeID, snap)
 			log.Printf("xds: snapshot published services=%s", snapshotServices(prefixes))
 		}
-		if len(services) > 0 {
-			for _, s := range services {
-				// etcd Watch 以服务前缀监听实例新增、更新和租约删除事件。
-				w := ec.Watch(ctx, discovery.RootPrefix+"/"+strings.Trim(s, "/")+"/", clientv3.WithPrefix())
-				for r := range w {
-					if r.Err() == nil {
-						log.Printf("xds: etcd event received service=%s revision=%d", s, r.Header.Revision)
-						snap = buildSnapshot(ctx, ec, services)
-						if snap != nil {
-							c.SetSnapshot(ctx, envoyNodeID, snap)
-						}
-					}
-				}
+		// 统一监听注册根目录，避免逐个 Watch 时第一个长连接阻塞后续服务。
+		// buildSnapshot 仍会按照 prefixes 过滤最终发布的服务。
+		w := ec.Watch(ctx, discovery.RootPrefix+"/", clientv3.WithPrefix())
+		for r := range w {
+			if r.Err() != nil {
+				log.Printf("xds: etcd watch failed: %v", r.Err())
+				break
 			}
-		} else {
-			// 未限定服务时监听注册根目录下的所有实例变化。
-			w := ec.Watch(ctx, discovery.RootPrefix+"/", clientv3.WithPrefix())
-			for r := range w {
-				if r.Err() != nil {
-					log.Printf("xds: etcd watch failed: %v", r.Err())
-					break
-				}
-				log.Printf("xds: etcd event received revision=%d", r.Header.Revision)
-				snap = buildSnapshot(ctx, ec, prefixes)
-				if snap != nil {
-					c.SetSnapshot(ctx, envoyNodeID, snap)
-					log.Printf("xds: snapshot published services=%s", snapshotServices(prefixes))
-				}
+			log.Printf("xds: etcd event received revision=%d", r.Header.Revision)
+			snap = buildSnapshot(ctx, ec, prefixes)
+			if snap != nil {
+				c.SetSnapshot(ctx, envoyNodeID, snap)
+				log.Printf("xds: snapshot published services=%s", snapshotServices(prefixes))
 			}
 		}
 		select {

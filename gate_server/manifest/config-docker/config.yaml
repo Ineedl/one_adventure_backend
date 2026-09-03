@@ -1,0 +1,15 @@
+server:
+  websocket:
+    dumpRouterMap: false
+websocket:
+  port: 8902
+  path: "/ws"
+  readBufferSize: 1024
+  writeBufferSize: 1024
+  maxMessageSize: 65536
+logger:
+  level: "all"
+  stdout: true
+database:
+  default:
+    link: "mysql:root:12345678@tcp(host.docker.internal:3306)/test"

@@ -1,0 +1,3 @@
+trace: {enabled: true, endpoint: "http://tempo:4317", insecure: true, sampleRatio: 0.1}
+log: {enabled: true, lokiUrl: "http://loki:3100", batchSize: 50, flushInterval: "1s"}
+metric: {enabled: true, address: ":9093"}

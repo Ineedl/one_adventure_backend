@@ -1,0 +1,5 @@
+publicKeyPath: "key/public.pem"
+issuer: "one-adventure-user"
+whitelist:
+  - "/user/api/v1/login"
+  - "/user/api/v1/refresh-token"
