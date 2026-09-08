@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
+	PayService_CreatePayment_FullMethodName      = "/pay.PayService/CreatePayment"
 	PayService_CreateTransaction_FullMethodName  = "/pay.PayService/CreateTransaction"
 	PayService_CancelTransaction_FullMethodName  = "/pay.PayService/CancelTransaction"
 	PayService_ThirdPartyCallback_FullMethodName = "/pay.PayService/ThirdPartyCallback"
@@ -28,6 +29,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PayServiceClient interface {
+	CreatePayment(ctx context.Context, in *CreatePaymentReq, opts ...grpc.CallOption) (*TransactionResp, error)
 	CreateTransaction(ctx context.Context, in *CreateTransactionReq, opts ...grpc.CallOption) (*TransactionResp, error)
 	CancelTransaction(ctx context.Context, in *CancelTransactionReq, opts ...grpc.CallOption) (*TransactionResp, error)
 	ThirdPartyCallback(ctx context.Context, in *ThirdPartyCallbackReq, opts ...grpc.CallOption) (*TransactionResp, error)
@@ -39,6 +41,15 @@ type payServiceClient struct {
 
 func NewPayServiceClient(cc grpc.ClientConnInterface) PayServiceClient {
 	return &payServiceClient{cc}
+}
+
+func (c *payServiceClient) CreatePayment(ctx context.Context, in *CreatePaymentReq, opts ...grpc.CallOption) (*TransactionResp, error) {
+	out := new(TransactionResp)
+	err := c.cc.Invoke(ctx, PayService_CreatePayment_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *payServiceClient) CreateTransaction(ctx context.Context, in *CreateTransactionReq, opts ...grpc.CallOption) (*TransactionResp, error) {
@@ -72,6 +83,7 @@ func (c *payServiceClient) ThirdPartyCallback(ctx context.Context, in *ThirdPart
 // All implementations must embed UnimplementedPayServiceServer
 // for forward compatibility
 type PayServiceServer interface {
+	CreatePayment(context.Context, *CreatePaymentReq) (*TransactionResp, error)
 	CreateTransaction(context.Context, *CreateTransactionReq) (*TransactionResp, error)
 	CancelTransaction(context.Context, *CancelTransactionReq) (*TransactionResp, error)
 	ThirdPartyCallback(context.Context, *ThirdPartyCallbackReq) (*TransactionResp, error)
@@ -82,6 +94,9 @@ type PayServiceServer interface {
 type UnimplementedPayServiceServer struct {
 }
 
+func (UnimplementedPayServiceServer) CreatePayment(context.Context, *CreatePaymentReq) (*TransactionResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreatePayment not implemented")
+}
 func (UnimplementedPayServiceServer) CreateTransaction(context.Context, *CreateTransactionReq) (*TransactionResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateTransaction not implemented")
 }
@@ -102,6 +117,24 @@ type UnsafePayServiceServer interface {
 
 func RegisterPayServiceServer(s grpc.ServiceRegistrar, srv PayServiceServer) {
 	s.RegisterService(&PayService_ServiceDesc, srv)
+}
+
+func _PayService_CreatePayment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreatePaymentReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PayServiceServer).CreatePayment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PayService_CreatePayment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PayServiceServer).CreatePayment(ctx, req.(*CreatePaymentReq))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _PayService_CreateTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -165,6 +198,10 @@ var PayService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "pay.PayService",
 	HandlerType: (*PayServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreatePayment",
+			Handler:    _PayService_CreatePayment_Handler,
+		},
 		{
 			MethodName: "CreateTransaction",
 			Handler:    _PayService_CreateTransaction_Handler,

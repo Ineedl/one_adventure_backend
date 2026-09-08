@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 	computingpb "one_adventure_rpc/proto/computing"
 	itempb "one_adventure_rpc/proto/item"
+	servermanagerpb "one_adventure_rpc/proto/server_manager"
 	userpb "one_adventure_rpc/proto/user"
 )
 
@@ -19,6 +20,12 @@ var clientFactories = map[string]ClientFactory{
 	},
 	"item": func(connection grpc.ClientConnInterface) any { return itempb.NewItemServiceClient(connection) },
 	"user": func(connection grpc.ClientConnInterface) any { return userpb.NewUserServiceClient(connection) },
+	"server_manager": func(connection grpc.ClientConnInterface) any {
+		return servermanagerpb.NewServerManagerServiceClient(connection)
+	},
+	"server-manager": func(connection grpc.ClientConnInterface) any {
+		return servermanagerpb.NewServerManagerServiceClient(connection)
+	},
 }
 
 // Client 根据服务名获取对应的生成代码 gRPC 客户端。

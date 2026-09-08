@@ -34,6 +34,15 @@ func newHandler(cfg WsConfig, manager *Manager) *Handler {
 // ServeHTTP upgrades and registers a managed WebSocket connection. The
 // upgrader keeps Gorilla's default same-origin validation for browser clients.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	params, err := parseConnectParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !h.manager.validConnectParams(params) {
+		http.Error(w, "invalid server or channel", http.StatusBadRequest)
+		return
+	}
 	connectionID := newIdentifier()
 	responseHeader := http.Header{}
 	responseHeader.Set("X-WebSocket-Connection-ID", connectionID)
@@ -42,7 +51,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.Log().Warningf(r.Context(), "websocket upgrade failed: %v", err)
 		return
 	}
-	connection := newConnection(r.Context(), connectionID, conn, h.manager.remove)
+	connection := newConnection(r.Context(), connectionID, params, conn, h.manager.remove)
 	h.manager.add(connection)
 	defer connection.Close()
 

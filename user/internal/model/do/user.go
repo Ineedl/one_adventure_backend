@@ -19,4 +19,5 @@ type User struct {
 	UpdateTime *gtime.Time //
 	Status     interface{} //
 	IsDeleted  interface{} //
+	IsAdmin    interface{} //
 }

@@ -13,6 +13,7 @@ import (
 	contractevent "one_adventure_servicekit/api-contract/event"
 	kafkakit "one_adventure_servicekit/kafka"
 
+	"order/internal/compensation"
 	"order/internal/dao"
 	"order/internal/orderstate"
 	ordertimeout "order/internal/timeout"
@@ -21,15 +22,16 @@ import (
 const promotionOrderType = 1
 
 type Consumer struct {
-	consumer *kafkakit.Consumer
+	consumer     *kafkakit.Consumer
+	compensation *compensation.Publisher
 }
 
-func New(ctx context.Context) (*Consumer, error) {
+func New(ctx context.Context, publisher *compensation.Publisher) (*Consumer, error) {
 	config, err := kafkakit.LoadConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &Consumer{consumer: kafkakit.NewConsumer(config, contractevent.PromotionOrderCreateTopic)}, nil
+	return &Consumer{consumer: kafkakit.NewConsumer(config, contractevent.PromotionOrderCreateTopic), compensation: publisher}, nil
 }
 
 func (c *Consumer) Run(ctx context.Context) error {
@@ -59,7 +61,8 @@ func (c *Consumer) handle(ctx context.Context, message segmentkafka.Message, com
 		if err != nil {
 			return err
 		}
-		orderNo := "ORD-" + uuid.NewString()
+		orderNo := uuid.NewString()
+		now := time.Now()
 		_, err = dao.Orders.Ctx(ctx).Data(map[string]any{
 			columns.OrderNo:      orderNo,
 			columns.UserId:       event.UserID,
@@ -71,8 +74,15 @@ func (c *Consumer) handle(ctx context.Context, message segmentkafka.Message, com
 			columns.Status:       orderstate.PendingPay,
 			columns.PromotionId:  event.PromotionID,
 			columns.RequestId:    event.RequestID,
+			columns.CreateTime:   now,
+			columns.UpdateTime:   now,
 		}).Insert()
 		if err != nil {
+			if c.compensation != nil {
+				if compensationErr := c.compensation.PublishEvent(ctx, contractevent.PromotionOrderCompensate{RequestID: event.RequestID, TraceID: event.TraceID, PromotionID: event.PromotionID, ProductID: event.ProductID, UserID: event.UserID, PayNum: event.PayNum, Reason: "order_create_failed", CreatedAt: time.Now().UnixMilli()}); compensationErr != nil {
+					return fmt.Errorf("create promotion order: %w; publish compensation: %v", err, compensationErr)
+				}
+			}
 			return fmt.Errorf("create promotion order: %w", err)
 		}
 		if err = ordertimeout.Add(ctx, orderNo, eventExpiresAt(event.CreatedAt)); err != nil {

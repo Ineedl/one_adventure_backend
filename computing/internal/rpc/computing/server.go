@@ -7,11 +7,12 @@ import (
 	"net"
 	"sync"
 
-	"github.com/gogf/gf/v2/frame/g"
-	"google.golang.org/grpc"
 	tracekit "one_adventure_observability_trace/trace"
 	computingpb "one_adventure_rpc/proto/computing"
 	"one_adventure_servicekit/discovery"
+
+	"github.com/gogf/gf/v2/frame/g"
+	"google.golang.org/grpc"
 )
 
 var ErrServerStarted = errors.New("computing rpc server is already started")
@@ -41,7 +42,7 @@ func New(ctx context.Context) (*Server, error) {
 	}
 	discoverer, err := discovery.NewDiscoverer(cfg.discoveryConfig())
 	if err != nil {
-		return nil, fmt.Errorf("create service discovery: %w", err)
+		return nil, fmt.Errorf("create service gateway_server_discovery: %w", err)
 	}
 	return newServer(cfg, newComputingService(), registrar, discoverer), nil
 }

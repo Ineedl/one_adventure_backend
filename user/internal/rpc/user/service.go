@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -84,17 +85,25 @@ func (s *userService) Login(ctx context.Context, request *userpb.LoginReq) (*use
 }
 
 func passwordMatches(password, storedHash string) bool {
-	calculated := []byte(passwordMD5(password))
-	stored := []byte(strings.TrimSpace(storedHash))
-	return len(calculated) == len(stored) && subtle.ConstantTimeCompare(calculated, stored) == 1
+	// LoginReq.password is an MD5 digest supplied by the client, never plaintext.
+	provided := strings.TrimSpace(password)
+	stored := strings.TrimSpace(storedHash)
+	if !md5Pattern.MatchString(provided) || len(stored) != md5HexLength {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(stored)) == 1
 }
+
+const md5HexLength = 32
+
+var md5Pattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 func passwordMD5(password string) string {
 	return fmt.Sprintf("%032x", md5.Sum([]byte(password)))
 }
 
 func userInfoFromEntity(user *entity.User) servicetoken.UserInfo {
-	return servicetoken.UserInfo{ID: user.Id, Username: user.Username, Status: user.Status}
+	return servicetoken.UserInfo{ID: user.Id, Username: user.Username, Status: user.Status, IsAdmin: user.IsAdmin != 0}
 }
 
 func (s *userService) UserInfoGet(_ context.Context, request *userpb.UserInfoGetReq) (*userpb.UserInfoGetResp, error) {

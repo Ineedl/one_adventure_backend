@@ -7,12 +7,13 @@ import (
 	"net"
 	"sync"
 
-	"github.com/gogf/gf/v2/frame/g"
-	"google.golang.org/grpc"
 	tracekit "one_adventure_observability_trace/trace"
 	userpb "one_adventure_rpc/proto/user"
 	"one_adventure_servicekit/discovery"
 	appconfig "user/internal/config"
+
+	"github.com/gogf/gf/v2/frame/g"
+	"google.golang.org/grpc"
 )
 
 var ErrServerStarted = errors.New("user rpc server is already started")
@@ -39,7 +40,7 @@ func New(ctx context.Context, jwtConfig appconfig.JWTConfig) (*Server, error) {
 	}
 	discoverer, err := discovery.NewDiscoverer(cfg.discoveryConfig())
 	if err != nil {
-		return nil, fmt.Errorf("create service discovery: %w", err)
+		return nil, fmt.Errorf("create service gateway_server_discovery: %w", err)
 	}
 	service, err := newDefaultUserService(jwtConfig)
 	if err != nil {

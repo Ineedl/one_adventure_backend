@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"sync"
 
-	"google.golang.org/grpc"
 	"one_adventure_gateway/internal/service"
 	"one_adventure_servicekit/discovery"
+
+	"google.golang.org/grpc"
 )
 
-var ErrServerStarted = errors.New("gateway discovery is already started")
+var ErrServerStarted = errors.New("gateway gateway_server_discovery is already started")
 
 // Server owns Gateway's Envoy-backed service connections.
 type Server struct {
@@ -29,7 +30,7 @@ func New(ctx context.Context) (*Server, error) {
 	}
 	discoverer, err := discovery.NewDiscoverer(cfg.discoveryConfig())
 	if err != nil {
-		return nil, fmt.Errorf("create service discovery: %w", err)
+		return nil, fmt.Errorf("create service gateway_server_discovery: %w", err)
 	}
 	instanceID := cfg.Etcd.InstanceID
 	if instanceID == "" {
@@ -58,7 +59,7 @@ func (s *Server) Start() error {
 	}()
 	if err := <-ready; err != nil {
 		cancel()
-		return fmt.Errorf("initialize gateway discovery: %w", err)
+		return fmt.Errorf("initialize gateway gateway_server_discovery: %w", err)
 	}
 	return nil
 }

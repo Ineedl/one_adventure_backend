@@ -17,4 +17,5 @@ type User struct {
 	UpdateTime *gtime.Time `json:"updateTime" orm:"update_time" description:""` //
 	Status     int         `json:"status"     orm:"status"      description:""` //
 	IsDeleted  int         `json:"isDeleted"  orm:"is_deleted"  description:""` //
+	IsAdmin    int         `json:"isAdmin"    orm:"is_admin"    description:""` //
 }

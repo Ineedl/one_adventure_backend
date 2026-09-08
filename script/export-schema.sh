@@ -7,7 +7,7 @@ usage() {
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
-output="$project_dir/schema-$(date +%Y%m%d-%H%M%S).sql"
+output="$project_dir/sql/schema-$(date +%Y%m%d-%H%M%S).sql"
 host="127.0.0.1"
 port="3306"
 user="root"

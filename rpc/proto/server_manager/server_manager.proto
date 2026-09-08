@@ -14,12 +14,19 @@ message ChannelInfo{
   int32 index=2;
   string name=3;
   uint64 server_id=4;
+  int64 ws_connections=5;
 }
 
 message ServerInfo{
   uint64  id=1;
   string name=2;
   repeated ChannelInfo channels=3;
+  bool occupied=4;
+  string instance_id=5;
+  string address=6;
+  int32 ws_port=7;
+  int64 ws_connections=8;
+  bool online=9;
 
 }
 
@@ -27,7 +34,11 @@ message ServerInfoGetResp{
   repeated ServerInfo servers=1;
 }
 
+message ChannelInfoGetReq { uint64 server_id = 1; }
+message ChannelInfoGetResp { repeated ChannelInfo channels = 1; }
+
 // 定义服务接口
 service ServerManagerService {
   rpc ServerInfoGet(ServerInfoGetReq) returns (ServerInfoGetResp);
+  rpc ChannelInfoGet(ChannelInfoGetReq) returns (ChannelInfoGetResp);
 }

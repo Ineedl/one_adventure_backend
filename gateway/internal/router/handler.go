@@ -41,19 +41,25 @@ func (h *Handler) dispatch(ctx context.Context, method, uri string, body []byte)
 	if err != nil {
 		return http.StatusNotFound, httpresponse.Failure(http.StatusNotFound, err.Error())
 	}
-	connection, err := h.resolver.ResolveService(key.Service)
-	if err != nil {
-		if errors.Is(err, service.ErrServiceUnavailable) {
-			return http.StatusServiceUnavailable, httpresponse.Failure(http.StatusServiceUnavailable, err.Error())
-		}
-		return http.StatusInternalServerError, httpresponse.Failure(http.StatusInternalServerError, "resolve service failed")
-	}
 	route, ok := h.routes[key]
 	if !ok {
 		return http.StatusNotFound, httpresponse.Failure(http.StatusNotFound, "route not found")
 	}
 	if method != route.Method {
 		return http.StatusMethodNotAllowed, httpresponse.Failure(http.StatusMethodNotAllowed, "method not allowed")
+	}
+	if route.IsAdmin {
+		userInfo, authenticated := servicetoken.UserInfoFromContext(ctx)
+		if !authenticated || !userInfo.IsAdmin {
+			return http.StatusForbidden, httpresponse.Failure(http.StatusForbidden, "permission denied")
+		}
+	}
+	connection, err := h.resolver.ResolveService(key.Service)
+	if err != nil {
+		if errors.Is(err, service.ErrServiceUnavailable) {
+			return http.StatusServiceUnavailable, httpresponse.Failure(http.StatusServiceUnavailable, err.Error())
+		}
+		return http.StatusInternalServerError, httpresponse.Failure(http.StatusInternalServerError, "resolve service failed")
 	}
 
 	rpcRequest := route.NewRequest()

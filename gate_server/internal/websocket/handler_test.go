@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,9 @@ func TestHandlerManagesConnectionAndHandlesClientRequest(t *testing.T) {
 	waitFor(t, func() bool { return manager.Len() == 1 })
 	if connection, exists := manager.Get(connectionID); !exists || connection.ID() != connectionID {
 		t.Fatalf("Manager.Get(%q) = %#v, %v", connectionID, connection, exists)
+	}
+	if connection, _ := manager.Get(connectionID); connection.Params().DeviceID != "test-device" {
+		t.Fatalf("connection params = %#v", connection.Params())
 	}
 
 	if err = client.WriteJSON(Request{
@@ -131,7 +135,8 @@ func testConfig() WsConfig {
 }
 
 func websocketURL(httpURL string) string {
-	return "ws" + strings.TrimPrefix(httpURL, "http")
+	params := url.QueryEscape(`{"device_id":"test-device","platform":"test"}`)
+	return "ws" + strings.TrimPrefix(httpURL, "http") + "?" + ConnectParamsQueryKey + "=" + params
 }
 
 func waitFor(t *testing.T, condition func() bool) {

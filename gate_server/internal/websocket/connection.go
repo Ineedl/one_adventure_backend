@@ -26,6 +26,7 @@ type responseResult struct {
 // calls to SendRequest and SendResponse.
 type Connection struct {
 	id     string
+	params ConnectParams
 	conn   *gorillaws.Conn
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -40,10 +41,11 @@ type Connection struct {
 	onClose   func(*Connection)
 }
 
-func newConnection(parent context.Context, id string, conn *gorillaws.Conn, onClose func(*Connection)) *Connection {
+func newConnection(parent context.Context, id string, params ConnectParams, conn *gorillaws.Conn, onClose func(*Connection)) *Connection {
 	ctx, cancel := context.WithCancel(parent)
 	return &Connection{
 		id:      id,
+		params:  params,
 		conn:    conn,
 		ctx:     ctx,
 		cancel:  cancel,
@@ -52,6 +54,10 @@ func newConnection(parent context.Context, id string, conn *gorillaws.Conn, onCl
 		onClose: onClose,
 	}
 }
+
+// Params returns the custom parameters supplied during the WebSocket
+// handshake. Callers should treat the returned value as read-only.
+func (c *Connection) Params() ConnectParams { return c.params }
 
 // ID returns the server-generated identifier of the connection.
 func (c *Connection) ID() string {

@@ -5,9 +5,17 @@ package pay;
 option go_package = "one_adventure_rpc/proto/pay;pay";
 
 service PayService {
+  rpc CreatePayment(CreatePaymentReq) returns (TransactionResp);
   rpc CreateTransaction(CreateTransactionReq) returns (TransactionResp);
   rpc CancelTransaction(CancelTransactionReq) returns (TransactionResp);
   rpc ThirdPartyCallback(ThirdPartyCallbackReq) returns (TransactionResp);
+}
+
+message CreatePaymentReq {
+  string request_id = 1;
+  string order_no = 2;
+  string channel = 3;
+  string currency = 4;
 }
 
 message CreateTransactionReq {

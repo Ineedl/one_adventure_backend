@@ -54,13 +54,13 @@ func (t *Task) Run(ctx context.Context) error {
 
 func (t *Task) scan(ctx context.Context, now time.Time) error {
 	offset, count := 0, scanBatch
-	members, err := g.Redis().ZRange(ctx, Key, 0, now.UnixMilli(), gredis.ZRangeOption{
-		ByScore: true,
-		Limit:   &gredis.ZRangeOptionLimit{Offset: &offset, Count: &count},
-	})
+	// Use the native Redis command here. Older GoFrame Redis adapters encode
+	// ZRangeOption as JSON, which produces an invalid ZRANGEBYSCORE command.
+	result, err := g.Redis().Do(ctx, "ZRANGEBYSCORE", Key, 0, now.UnixMilli(), "LIMIT", offset, count)
 	if err != nil {
 		return fmt.Errorf("read expired orders from redis: %w", err)
 	}
+	members := result.Vars()
 	for _, member := range members {
 		columns := dao.Orders.Columns()
 		var order entity.Orders

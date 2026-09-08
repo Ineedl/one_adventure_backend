@@ -18,6 +18,8 @@ type Manager struct {
 	mu          sync.RWMutex
 	connections map[string]*Connection
 	handler     RequestHandler
+	server      ServerInfo
+	channels    map[uint64]ChannelInfo
 }
 
 // NewManager creates an empty connection manager.
@@ -25,7 +27,33 @@ func NewManager() *Manager {
 	return &Manager{
 		connections: make(map[string]*Connection),
 		handler:     echoRequestHandler,
+		channels:    make(map[uint64]ChannelInfo),
 	}
+}
+
+// SetServerInfo replaces the server/channel snapshot used to validate new
+// WebSocket handshakes.
+func (m *Manager) SetServerInfo(server ServerInfo, channels []ChannelInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.server = server
+	m.channels = make(map[uint64]ChannelInfo, len(channels))
+	for _, channel := range channels {
+		m.channels[uint64(channel.ChannelId)] = channel
+	}
+}
+
+func (m *Manager) validConnectParams(params ConnectParams) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if params.ServerInfo.ServerName == "" || params.ServerInfo.ServerName != m.server.ServerName {
+		return false
+	}
+	if params.ChannelInfo.ChannelId == 0 {
+		return false
+	}
+	channel, ok := m.channels[uint64(params.ChannelInfo.ChannelId)]
+	return ok && (params.ChannelInfo.ChannelName == "" || params.ChannelInfo.ChannelName == channel.ChannelName)
 }
 
 // SetRequestHandler replaces the handler for requests received from clients.
@@ -63,6 +91,16 @@ func (m *Manager) Len() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.connections)
+}
+
+func (m *Manager) ChannelCounts() map[uint64]int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	counts := make(map[uint64]int64)
+	for _, c := range m.connections {
+		counts[uint64(c.Params().ChannelInfo.ChannelId)]++
+	}
+	return counts
 }
 
 // SendRequest sends a request through one connection and waits for its

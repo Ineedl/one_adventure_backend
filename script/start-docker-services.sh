@@ -51,7 +51,7 @@ else
     for service in "$@"; do
         case "$service" in
             gate_server) compose_services+=("gate-server") ;;
-            server_manager) compose_services+=("server-manager") ;;
+            server_manager|server-manager) compose_services+=("server-manager") ;;
             nginx)
                 compose_services+=("nginx-lb" "nginx-node-1" "nginx-node-2" "nginx-node-3")
                 ;;

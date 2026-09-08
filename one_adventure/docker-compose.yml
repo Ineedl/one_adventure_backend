@@ -71,6 +71,8 @@ services:
   server-manager:
     build: {context: ../server_manager, dockerfile: manifest/docker/Dockerfile}
     image: one-adventure/server-manager:latest
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
     volumes: ["../server_manager/manifest/config-docker:/app/config:ro"]
     container_name: one-adventure-server-manager
     restart: unless-stopped

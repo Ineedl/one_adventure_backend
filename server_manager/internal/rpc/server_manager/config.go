@@ -3,6 +3,8 @@ package server_manager
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -40,6 +42,10 @@ func loadConfig(ctx context.Context) (Config, error) {
 	var config Config
 	if err = value.Scan(&config); err != nil {
 		return Config{}, fmt.Errorf("parse server manager rpc config: %w", err)
+	}
+	// Allow container deployments to override stale/local etcd addresses.
+	if endpoints := strings.TrimSpace(os.Getenv("ETCD_ENDPOINTS")); endpoints != "" {
+		config.Etcd.Endpoints = strings.Split(endpoints, ",")
 	}
 	if err = config.validate(); err != nil {
 		return Config{}, fmt.Errorf("validate server manager rpc config: %w", err)

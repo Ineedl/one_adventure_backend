@@ -1,4 +1,4 @@
-// Package discovery provides etcd-backed service registration and gRPC discovery.
+// Package gateway_server_discovery provides etcd-backed service registration and gRPC gateway_server_discovery.
 package discovery
 
 import (
@@ -373,7 +373,7 @@ func (d *Discoverer) run(ctx context.Context, serviceNames []string, watchAll bo
 		response, err := d.client.Get(getCtx, prefix, clientv3.WithPrefix())
 		cancelGet()
 		if err != nil {
-			d.error("initial etcd service discovery failed", "prefix", prefix, "error", err)
+			d.error("initial etcd service gateway_server_discovery failed", "prefix", prefix, "error", err)
 			if ready != nil {
 				ready <- err
 			}

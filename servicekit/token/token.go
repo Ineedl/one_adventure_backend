@@ -36,6 +36,7 @@ type UserInfo struct {
 	ID       uint64 `json:"id"`
 	Username string `json:"username"`
 	Status   int    `json:"status"`
+	IsAdmin  bool   `json:"is_admin"`
 }
 
 func WithUserInfo(ctx context.Context, userInfo UserInfo) context.Context {

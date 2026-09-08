@@ -47,13 +47,6 @@ var (
 			defer shutdownMetric(context.Background())
 			shutdownLog := obslog.Init("order", obslog.NewInstanceID("order"), observability.LogRuntime())
 			defer shutdownLog(context.Background())
-			consumer, err := promotionorder.New(ctx)
-			if err != nil {
-				return err
-			}
-			consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-			defer cancelConsumer()
-			defer consumer.Close()
 			kafkaConfig, err := kafkakit.LoadConfig(ctx)
 			if err != nil {
 				return err
@@ -61,6 +54,13 @@ var (
 			compensationProducer := kafkakit.NewProducer(kafkaConfig)
 			defer compensationProducer.Close()
 			compensationPublisher := compensation.New(compensationProducer)
+			consumer, err := promotionorder.New(ctx, compensationPublisher)
+			if err != nil {
+				return err
+			}
+			consumerCtx, cancelConsumer := context.WithCancel(context.Background())
+			defer cancelConsumer()
+			defer consumer.Close()
 			refundPublisher := refund.New(compensationProducer)
 			payReportConsumer, err := payreport.New(ctx, refundPublisher, compensationPublisher)
 			if err != nil {

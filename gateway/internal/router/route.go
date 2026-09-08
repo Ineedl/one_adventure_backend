@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/http"
 	itempb "one_adventure_rpc/proto/item"
+	paypb "one_adventure_rpc/proto/pay"
+	promotionpb "one_adventure_rpc/proto/promotion"
+	servermanagerpb "one_adventure_rpc/proto/server_manager"
 
 	userpb "one_adventure_rpc/proto/user"
 
@@ -18,6 +21,7 @@ type RouteKey struct {
 
 type Route struct {
 	Method     string
+	IsAdmin    bool
 	NewRequest func() any
 	Invoke     func(ctx context.Context, connection grpc.ClientConnInterface, request any) (any, error)
 }
@@ -45,6 +49,49 @@ func DefaultRouteTable() RouteTable {
 			NewRequest: func() any { return &itempb.InventoryConfGetReq{} },
 			Invoke: func(ctx context.Context, connection grpc.ClientConnInterface, request any) (any, error) {
 				return itempb.NewItemServiceClient(connection).InventoryConfGet(ctx, request.(*itempb.InventoryConfGetReq))
+			},
+		},
+		{Service: "promotion", Version: "v1", Path: "stock-refresh"}: {
+			Method:     http.MethodPost,
+			IsAdmin:    true,
+			NewRequest: func() any { return &promotionpb.PromotionStockRefreshReq{} },
+			Invoke: func(ctx context.Context, connection grpc.ClientConnInterface, request any) (any, error) {
+				return promotionpb.NewPromotionServiceClient(connection).PromotionStockRefresh(ctx, request.(*promotionpb.PromotionStockRefreshReq))
+			},
+		},
+		{Service: "promotion", Version: "v1", Path: "seckill"}: {
+			Method:     http.MethodPost,
+			NewRequest: func() any { return &promotionpb.SeckillReq{} },
+			Invoke: func(ctx context.Context, connection grpc.ClientConnInterface, request any) (any, error) {
+				return promotionpb.NewPromotionServiceClient(connection).Seckill(ctx, request.(*promotionpb.SeckillReq))
+			},
+		},
+		{Service: "pay", Version: "v1", Path: "create"}: {
+			Method:     http.MethodPost,
+			NewRequest: func() any { return &paypb.CreatePaymentReq{} },
+			Invoke: func(ctx context.Context, c grpc.ClientConnInterface, req any) (any, error) {
+				return paypb.NewPayServiceClient(c).CreatePayment(ctx, req.(*paypb.CreatePaymentReq))
+			},
+		},
+		{Service: "pay", Version: "v1", Path: "callback"}: {
+			Method:     http.MethodPost,
+			NewRequest: func() any { return &paypb.ThirdPartyCallbackReq{} },
+			Invoke: func(ctx context.Context, c grpc.ClientConnInterface, req any) (any, error) {
+				return paypb.NewPayServiceClient(c).ThirdPartyCallback(ctx, req.(*paypb.ThirdPartyCallbackReq))
+			},
+		},
+		{Service: "server_manager", Version: "v1", Path: "server_info"}: {
+			Method:     http.MethodPost,
+			NewRequest: func() any { return &servermanagerpb.ServerInfoGetReq{} },
+			Invoke: func(ctx context.Context, c grpc.ClientConnInterface, req any) (any, error) {
+				return servermanagerpb.NewServerManagerServiceClient(c).ServerInfoGet(ctx, req.(*servermanagerpb.ServerInfoGetReq))
+			},
+		},
+		{Service: "server_manager", Version: "v1", Path: "channel_info"}: {
+			Method:     http.MethodPost,
+			NewRequest: func() any { return &servermanagerpb.ChannelInfoGetReq{} },
+			Invoke: func(ctx context.Context, c grpc.ClientConnInterface, req any) (any, error) {
+				return servermanagerpb.NewServerManagerServiceClient(c).ChannelInfoGet(ctx, req.(*servermanagerpb.ChannelInfoGetReq))
 			},
 		},
 	}

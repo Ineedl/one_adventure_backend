@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gogf/gf/v2/database/gdb"
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -25,6 +26,27 @@ import (
 type Service struct {
 	paypb.UnimplementedPayServiceServer
 	reporter *report.Publisher
+}
+
+func (s *Service) CreatePayment(ctx context.Context, req *paypb.CreatePaymentReq) (*paypb.TransactionResp, error) {
+	if req.GetOrderNo() == "" || req.GetChannel() == "" || req.GetCurrency() == "" {
+		return nil, status.Error(codes.InvalidArgument, "order_no, currency and channel are required")
+	}
+	var order struct {
+		OrderNo      string  `json:"order_no"`
+		UserId       uint64  `json:"user_id"`
+		Amount       float64 `json:"amount"`
+		CurrencyType int     `json:"currency_type"`
+	}
+	if err := g.Model("orders").Ctx(ctx).Where("order_no", req.GetOrderNo()).Scan(&order); err != nil || order.OrderNo == "" {
+		return nil, status.Error(codes.NotFound, "order not found")
+	}
+	cents := amountCents(order.Amount)
+	requestID := req.GetRequestId()
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	return s.CreateTransaction(ctx, &paypb.CreateTransactionReq{RequestId: requestID, OrderNo: order.OrderNo, UserId: order.UserId, Amount: cents, Currency: req.GetCurrency(), Channel: req.GetChannel()})
 }
 
 func NewService(reporter *report.Publisher) *Service { return &Service{reporter: reporter} }

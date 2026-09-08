@@ -10,9 +10,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	promotionpb "one_adventure_rpc/proto/promotion"
 	userpb "one_adventure_rpc/proto/user"
 
 	"one_adventure_gateway/internal/service"
+	servicetoken "one_adventure_servicekit/token"
 )
 
 type fakeResolver struct {
@@ -109,6 +111,64 @@ func TestHandlerRejectsInvalidRoutesAndMethods(t *testing.T) {
 		if httpStatus != test.want || response.Code != test.want {
 			t.Fatalf("dispatch(%q) status = %d, response = %#v", test.uri, httpStatus, response)
 		}
+	}
+}
+
+func TestHandlerRequiresAdminOnlyForAdminRoutes(t *testing.T) {
+	key := RouteKey{Service: "user", Version: "v1", Path: "login"}
+	invoked := false
+	routes := RouteTable{key: {
+		Method:     http.MethodPost,
+		IsAdmin:    true,
+		NewRequest: func() any { return &userpb.LoginReq{} },
+		Invoke: func(context.Context, grpc.ClientConnInterface, any) (any, error) {
+			invoked = true
+			return &userpb.LoginResp{}, nil
+		},
+	}}
+	resolver := &fakeResolver{connection: &fakeConnection{}}
+	handler := NewHandler(resolver, routes)
+
+	for _, ctx := range []context.Context{
+		context.Background(),
+		servicetoken.WithUserInfo(context.Background(), servicetoken.UserInfo{ID: 1, IsAdmin: false}),
+	} {
+		httpStatus, response := handler.dispatch(ctx, http.MethodPost, "/user/api/v1/login", []byte(`{}`))
+		if httpStatus != http.StatusForbidden || response.Code != http.StatusForbidden || response.Msg != "permission denied" {
+			t.Fatalf("non-admin status = %d, response = %#v", httpStatus, response)
+		}
+	}
+	if invoked || resolver.serviceName != "" {
+		t.Fatal("admin-only route reached resolver or downstream for non-admin user")
+	}
+
+	ctx := servicetoken.WithUserInfo(context.Background(), servicetoken.UserInfo{ID: 1, IsAdmin: true})
+	httpStatus, response := handler.dispatch(ctx, http.MethodPost, "/user/api/v1/login", []byte(`{}`))
+	if httpStatus != http.StatusOK || response.Code != 0 || !invoked {
+		t.Fatalf("admin status = %d, response = %#v, invoked = %v", httpStatus, response, invoked)
+	}
+}
+
+func TestHandlerDispatchesPromotionStockRefreshForAdmin(t *testing.T) {
+	connection := &fakeConnection{invoke: func(method string, request, response any) error {
+		if method != promotionpb.PromotionService_PromotionStockRefresh_FullMethodName {
+			t.Fatalf("gRPC method = %q", method)
+		}
+		if request.(*promotionpb.PromotionStockRefreshReq).GetPromotionId() != 7 {
+			t.Fatalf("refresh request = %#v", request)
+		}
+		response.(*promotionpb.PromotionStockRefreshResp).RefreshedCount = 3
+		return nil
+	}}
+	handler := NewHandler(&fakeResolver{connection: connection}, DefaultRouteTable())
+	ctx := servicetoken.WithUserInfo(context.Background(), servicetoken.UserInfo{ID: 1, IsAdmin: true})
+
+	httpStatus, response := handler.dispatch(
+		ctx, http.MethodPost, "/promotion/api/v1/stock-refresh", []byte(`{"promotion_id":7}`),
+	)
+	result, ok := response.Data.(*promotionpb.PromotionStockRefreshResp)
+	if httpStatus != http.StatusOK || !ok || result.GetRefreshedCount() != 3 {
+		t.Fatalf("dispatch status = %d, response = %#v", httpStatus, response)
 	}
 }
 

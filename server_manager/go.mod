@@ -3,6 +3,7 @@ module server_manager
 go 1.25.0
 
 require (
+	github.com/gogf/gf/contrib/drivers/mysql/v2 v2.10.2
 	github.com/gogf/gf/v2 v2.10.2
 	google.golang.org/grpc v1.82.1
 	one_adventure_observability_config v0.0.0
@@ -26,6 +27,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-sql-driver/mysql v1.7.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect

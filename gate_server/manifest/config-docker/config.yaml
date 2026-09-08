@@ -7,6 +7,13 @@ websocket:
   readBufferSize: 1024
   writeBufferSize: 1024
   maxMessageSize: 65536
+gateRegistration:
+  etcdEndpoints: ["etcd:2379"]
+  dialTimeout: "5s"
+  envoyAddress: "envoy:15001"
+  leaseTtl: 30
+  address: ""
+  wsPort: 8902
 logger:
   level: "all"
   stdout: true

@@ -1,5 +1,5 @@
 server: {address: ":8000", openapiPath: "/api.json", swaggerPath: "/swagger"}
 logger: {level: "all", stdout: true}
 database:
-  default: {link: "mysql:root:12345678@tcp(host.docker.internal:3306)/test"}
+  default: {link: "mysql:root:zxc563221659@tcp(host.docker.internal:3306)/one_adventure_commerce"}
 rpc: {orderAddress: "order:9009"}

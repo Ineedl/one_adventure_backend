@@ -1,5 +1,6 @@
 gate
 gate_server
+server_manager
 item
 order
 pay

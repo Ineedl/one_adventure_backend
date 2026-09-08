@@ -54,6 +54,9 @@ func (s *service) Seckill(ctx context.Context, r *pb.SeckillReq) (*pb.SeckillRes
 	limitKey := fmt.Sprintf("promotion_limit:%d:%d:%d", r.PromotionId, r.ProductId, u.ID)
 	v, err := g.Redis().GroupScript().Eval(ctx, promotionscript.Seckill, 2, []string{stockKey, limitKey}, []any{r.PayNum})
 	if err != nil {
+		obslog.Error(ctx, "execute promotion seckill script failed", map[string]any{
+			"promotion_id": r.PromotionId, "product_id": r.ProductId, "user_id": u.ID, "error": err.Error(),
+		})
 		return nil, status.Error(codes.Internal, "execute seckill failed")
 	}
 	switch v.Int() {
@@ -77,6 +80,9 @@ func (s *service) Seckill(ctx context.Context, r *pb.SeckillReq) (*pb.SeckillRes
 	}
 	b, _ := json.Marshal(event)
 	if err = s.producer.Write(ctx, contractevent.PromotionOrderCreateTopic, strconv.FormatUint(u.ID, 10), b); err != nil {
+		obslog.Error(ctx, "publish promotion order failed", map[string]any{
+			"promotion_id": r.PromotionId, "product_id": r.ProductId, "user_id": u.ID, "request_id": requestID, "error": err.Error(),
+		})
 		compensateCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		compensateResult, compensateErr := g.Redis().GroupScript().Eval(
@@ -121,6 +127,9 @@ func (s *service) PromotionStockRefresh(ctx context.Context, r *pb.PromotionStoc
 		EndTime time.Time `json:"endTime"`
 	}
 	if err := m.Fields("pp.*", "p."+p.EndTime+" end_time").Scan(&rows); err != nil {
+		obslog.Error(ctx, "query promotion stock failed", map[string]any{
+			"promotion_id": r.PromotionId, "product_id": r.ProductId, "error": err.Error(),
+		})
 		return nil, status.Error(codes.Internal, "query promotion stock failed")
 	}
 	for _, row := range rows {
@@ -139,6 +148,9 @@ func (s *service) PromotionStockRefresh(ctx context.Context, r *pb.PromotionStoc
 			_, err = g.Redis().Expire(ctx, key, int64(ttl.Seconds()))
 		}
 		if err != nil {
+			obslog.Error(ctx, "write promotion stock failed", map[string]any{
+				"promotion_id": row.PromotionId, "product_id": row.ProductId, "redis_key": key, "error": err.Error(),
+			})
 			return nil, status.Error(codes.Internal, "write promotion stock failed")
 		}
 	}
