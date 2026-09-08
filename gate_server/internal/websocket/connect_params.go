@@ -11,7 +11,7 @@ const ConnectParamsQueryKey = "connect_params"
 
 var ErrConnectParamsRequired = errors.New("websocket connect_params is required")
 
-// ConnectParams contains application-defined parameters supplied during the
+// WsConnectParams contains application-defined parameters supplied during the
 // WebSocket handshake. Add strongly typed fields here as the connection
 // protocol evolves; Metadata is reserved for forward-compatible values.
 
@@ -26,7 +26,7 @@ type ServerInfo struct {
 	ServerName string `json:"server_name"`
 }
 
-type ConnectParams struct {
+type WsConnectParams struct {
 	UserID      uint64            `json:"user_id,omitempty"`
 	DeviceID    string            `json:"device_id,omitempty"`
 	Platform    string            `json:"platform,omitempty"`
@@ -35,14 +35,14 @@ type ConnectParams struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-func parseConnectParams(request *http.Request) (ConnectParams, error) {
+func parseConnectParams(request *http.Request) (WsConnectParams, error) {
 	raw := request.URL.Query().Get(ConnectParamsQueryKey)
 	if raw == "" {
-		return ConnectParams{}, ErrConnectParamsRequired
+		return WsConnectParams{}, ErrConnectParamsRequired
 	}
-	var params ConnectParams
+	var params WsConnectParams
 	if err := json.Unmarshal([]byte(raw), &params); err != nil {
-		return ConnectParams{}, fmt.Errorf("decode websocket connect_params: %w", err)
+		return WsConnectParams{}, fmt.Errorf("decode websocket connect_params: %w", err)
 	}
 	return params, nil
 }

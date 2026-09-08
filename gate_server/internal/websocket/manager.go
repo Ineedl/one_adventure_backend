@@ -43,7 +43,7 @@ func (m *Manager) SetServerInfo(server ServerInfo, channels []ChannelInfo) {
 	}
 }
 
-func (m *Manager) validConnectParams(params ConnectParams) bool {
+func (m *Manager) validConnectParams(params WsConnectParams) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if params.ServerInfo.ServerName == "" || params.ServerInfo.ServerName != m.server.ServerName {
