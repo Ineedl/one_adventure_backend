@@ -1,6 +1,6 @@
 gate
 gate_server
-server_manager
+ws_gateway
 item
 order
 pay

@@ -6,7 +6,7 @@ import (
 	itempb "one_adventure_rpc/proto/item"
 	paypb "one_adventure_rpc/proto/pay"
 	promotionpb "one_adventure_rpc/proto/promotion"
-	servermanagerpb "one_adventure_rpc/proto/server_manager"
+	servermanagerpb "one_adventure_rpc/proto/ws_gateway"
 
 	userpb "one_adventure_rpc/proto/user"
 
@@ -80,18 +80,18 @@ func DefaultRouteTable() RouteTable {
 				return paypb.NewPayServiceClient(c).ThirdPartyCallback(ctx, req.(*paypb.ThirdPartyCallbackReq))
 			},
 		},
-		{Service: "server_manager", Version: "v1", Path: "server_info"}: {
+		{Service: "ws_gateway", Version: "v1", Path: "server_info"}: {
 			Method:     http.MethodPost,
 			NewRequest: func() any { return &servermanagerpb.ServerInfoGetReq{} },
 			Invoke: func(ctx context.Context, c grpc.ClientConnInterface, req any) (any, error) {
-				return servermanagerpb.NewServerManagerServiceClient(c).ServerInfoGet(ctx, req.(*servermanagerpb.ServerInfoGetReq))
+				return servermanagerpb.NewWsGatewayServiceClient(c).ServerInfoGet(ctx, req.(*servermanagerpb.ServerInfoGetReq))
 			},
 		},
-		{Service: "server_manager", Version: "v1", Path: "channel_info"}: {
+		{Service: "ws_gateway", Version: "v1", Path: "channel_info"}: {
 			Method:     http.MethodPost,
 			NewRequest: func() any { return &servermanagerpb.ChannelInfoGetReq{} },
 			Invoke: func(ctx context.Context, c grpc.ClientConnInterface, req any) (any, error) {
-				return servermanagerpb.NewServerManagerServiceClient(c).ChannelInfoGet(ctx, req.(*servermanagerpb.ChannelInfoGetReq))
+				return servermanagerpb.NewWsGatewayServiceClient(c).ChannelInfoGet(ctx, req.(*servermanagerpb.ChannelInfoGetReq))
 			},
 		},
 	}

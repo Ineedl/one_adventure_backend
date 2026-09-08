@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	servermanagerpb "one_adventure_rpc/proto/server_manager"
+	servermanagerpb "one_adventure_rpc/proto/ws_gateway"
 	"one_adventure_servicekit/api-contract/gateway_server_discovery"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -39,14 +39,14 @@ type Lease struct {
 }
 
 func FetchServerInfo(ctx context.Context, envoyAddress, name string) (*servermanagerpb.ServerInfo, error) {
-	conn, err := grpc.NewClient(envoyAddress, grpc.WithAuthority("server_manager"), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(envoyAddress, grpc.WithAuthority("ws_gateway"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 	// The server has already been claimed by this gate instance, so it is no
 	// longer part of the type=1 (unoccupied) result. Query all servers here.
-	resp, err := servermanagerpb.NewServerManagerServiceClient(conn).ServerInfoGet(ctx, &servermanagerpb.ServerInfoGetReq{Type: 0})
+	resp, err := servermanagerpb.NewWsGatewayServiceClient(conn).ServerInfoGet(ctx, &servermanagerpb.ServerInfoGetReq{Type: 0})
 	if err != nil {
 		return nil, err
 	}
@@ -62,12 +62,12 @@ func Acquire(ctx context.Context, cfg Config) (*Lease, string, error) {
 	if len(cfg.EtcdEndpoints) == 0 || cfg.EnvoyAddress == "" || cfg.Address == "" || cfg.WSPort < 1 || cfg.LeaseTTL <= 0 {
 		return nil, "", errors.New("invalid gate registration config")
 	}
-	conn, err := grpc.NewClient(cfg.EnvoyAddress, grpc.WithAuthority("server_manager"), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(cfg.EnvoyAddress, grpc.WithAuthority("ws_gateway"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, "", fmt.Errorf("connect server manager: %w", err)
 	}
 	defer conn.Close()
-	client := servermanagerpb.NewServerManagerServiceClient(conn)
+	client := servermanagerpb.NewWsGatewayServiceClient(conn)
 	etcd, err := clientv3.New(clientv3.Config{Endpoints: cfg.EtcdEndpoints, DialTimeout: cfg.DialTimeout})
 	if err != nil {
 		return nil, "", fmt.Errorf("connect etcd: %w", err)

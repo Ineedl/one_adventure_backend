@@ -68,13 +68,13 @@ services:
     expose: ["8000"]
     depends_on: [etcd]
 
-  server-manager:
-    build: {context: ../server_manager, dockerfile: manifest/docker/Dockerfile}
-    image: one-adventure/server-manager:latest
+  ws-gateway:
+    build: {context: ../ws_gateway, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/ws-gateway:latest
     environment:
       ETCD_ENDPOINTS: etcd:2379
-    volumes: ["../server_manager/manifest/config-docker:/app/config:ro"]
-    container_name: one-adventure-server-manager
+    volumes: ["../ws_gateway/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-ws-gateway
     restart: unless-stopped
     expose: ["8000", "9004"]
     depends_on: [etcd]

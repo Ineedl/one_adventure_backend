@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc"
 	computingpb "one_adventure_rpc/proto/computing"
 	itempb "one_adventure_rpc/proto/item"
-	servermanagerpb "one_adventure_rpc/proto/server_manager"
+	servermanagerpb "one_adventure_rpc/proto/ws_gateway"
 	userpb "one_adventure_rpc/proto/user"
 )
 
@@ -20,11 +20,11 @@ var clientFactories = map[string]ClientFactory{
 	},
 	"item": func(connection grpc.ClientConnInterface) any { return itempb.NewItemServiceClient(connection) },
 	"user": func(connection grpc.ClientConnInterface) any { return userpb.NewUserServiceClient(connection) },
-	"server_manager": func(connection grpc.ClientConnInterface) any {
-		return servermanagerpb.NewServerManagerServiceClient(connection)
+	"ws_gateway": func(connection grpc.ClientConnInterface) any {
+		return servermanagerpb.NewWsGatewayServiceClient(connection)
 	},
-	"server-manager": func(connection grpc.ClientConnInterface) any {
-		return servermanagerpb.NewServerManagerServiceClient(connection)
+	"ws-gateway": func(connection grpc.ClientConnInterface) any {
+		return servermanagerpb.NewWsGatewayServiceClient(connection)
 	},
 }
 

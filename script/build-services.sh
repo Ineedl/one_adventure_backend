@@ -7,7 +7,7 @@ set -euo pipefail
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
-services=(gateway gate_server computing user item commerce server_manager order pay promotion xds)
+services=(gateway gate_server computing user item commerce ws_gateway order pay promotion xds)
 
 usage() {
     echo "Usage: $0 [all|service ...]"

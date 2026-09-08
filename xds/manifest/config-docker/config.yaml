@@ -4,4 +4,4 @@ etcd:
 listen:
   address: "0.0.0.0"
   port: 18000
-services: ["gateway", "computing", "user", "item", "server_manager", "promotion"]
+services: ["gateway", "computing", "user", "item", "ws_gateway", "promotion"]

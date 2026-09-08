@@ -30,14 +30,14 @@ protoc \
     --go-grpc_opt=paths=source_relative \
     proto/item/item.proto
 
-# server_manager.proto
+# ws_gateway.proto
 protoc \
     -I . \
     --go_out=. \
     --go_opt=paths=source_relative \
     --go-grpc_out=. \
     --go-grpc_opt=paths=source_relative \
-    proto/server_manager/server_manager.proto
+    proto/ws_gateway/ws_gateway.proto
 
 # order.proto and pay.proto
 for proto in proto/order/order.proto proto/pay/pay.proto; do

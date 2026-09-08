@@ -1,9 +1,0 @@
-port: 9004
-etcd:
-  endpoints: ["127.0.0.1:2379"]
-  dialTimeout: "5s"
-  leaseTtl: 10
-  serverName: "server_manager"
-  instanceId: ""
-  address: "host.docker.internal"
-  httpPort: 8000

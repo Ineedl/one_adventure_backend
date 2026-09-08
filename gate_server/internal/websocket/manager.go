@@ -18,8 +18,8 @@ type Manager struct {
 	mu          sync.RWMutex
 	connections map[string]*Connection
 	handler     RequestHandler
-	server      ServerInfo
-	channels    map[uint64]ChannelInfo
+	server      ConnectServerInfo
+	channels    map[uint64]ConnectChannelInfo
 }
 
 // NewManager creates an empty connection manager.
@@ -27,17 +27,17 @@ func NewManager() *Manager {
 	return &Manager{
 		connections: make(map[string]*Connection),
 		handler:     echoRequestHandler,
-		channels:    make(map[uint64]ChannelInfo),
+		channels:    make(map[uint64]ConnectChannelInfo),
 	}
 }
 
 // SetServerInfo replaces the server/channel snapshot used to validate new
 // WebSocket handshakes.
-func (m *Manager) SetServerInfo(server ServerInfo, channels []ChannelInfo) {
+func (m *Manager) SetServerInfo(server ConnectServerInfo, channels []ConnectChannelInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.server = server
-	m.channels = make(map[uint64]ChannelInfo, len(channels))
+	m.channels = make(map[uint64]ConnectChannelInfo, len(channels))
 	for _, channel := range channels {
 		m.channels[uint64(channel.ChannelId)] = channel
 	}
