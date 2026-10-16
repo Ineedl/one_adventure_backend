@@ -251,3 +251,7 @@ GitHub Actions 手动选择 `gateway` 或 `all` 部署即可应用此配置。
 kubectl -n one-adventure get svc gateway
 kubectl get nodes -o wide
 ```
+
+Actions 将镜像、配置校验值、拉取凭据及本次部署标记一起写入 Pod 模板，单次 apply，
+不会在首次创建后追加 patch/restart 触发多次更新。同版本重新部署仍会更新 Pod。
+首次创建按副本数启动：gateway 为 2，其余应用为 1；后续滚动更新期间可能临时出现额外 Pod。

@@ -189,12 +189,16 @@ done
 fi
 # Apply only selected application resources for a partial release. Shared
 # middleware and other applications keep their existing versions and config.
-python3 - "$render_dir" "${services[@]}" <<'FILTER'
+DOCKER_CONFIG_FILE="$docker_config_file" python3 - "$render_dir" "${services[@]}" <<'FILTER'
 from pathlib import Path
+import os
 import sys
+import uuid
 import yaml
 root = Path(sys.argv[1])
 selected = set(sys.argv[2:])
+# One token per invocation also refreshes images when a tag is reused.
+release_id = uuid.uuid4().hex
 documents = []
 for name in ("stack.yaml", "applications.yaml"):
     for doc in yaml.safe_load_all((root / name).read_text()):
@@ -204,25 +208,19 @@ for name in ("stack.yaml", "applications.yaml"):
             if len(selected) != 11:
                 continue
         if doc.get("kind") == "Deployment" and doc["metadata"]["name"] in selected:
+            service = doc["metadata"]["name"]
+            annotations = doc["spec"]["template"].setdefault("metadata", {}).setdefault("annotations", {})
+            annotations["checksum/config"] = (root / f"{service}-config.sha256").read_text().strip()
+            annotations["one-adventure/deployment-id"] = release_id
+            if os.environ.get("DOCKER_CONFIG_FILE"):
+                doc["spec"]["template"]["spec"]["imagePullSecrets"] = [{"name": "dockerhub-auth"}]
             for container in doc["spec"]["template"]["spec"]["containers"]:
                 container["imagePullPolicy"] = "Always"
         documents.append(doc)
 (root / "selected.yaml").write_text(yaml.safe_dump_all(documents, sort_keys=False))
 FILTER
 kubectl apply -f "$render_dir/selected.yaml"
+# The complete Pod template is applied once; only observe the rollout here.
 for service in "${services[@]}"; do
-  config_hash=$(cat "$render_dir/$service-config.sha256")
-  kubectl -n "$KUBE_NAMESPACE" patch deployment "$service" --type=strategic \
-    -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"checksum/config\":\"$config_hash\"}}}}}"
-done
-if [[ -n "$docker_config_file" ]]; then
-  for service in "${services[@]}"; do
-    kubectl -n "$KUBE_NAMESPACE" patch deployment "$service" --type=strategic \
-      -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"dockerhub-auth"}]}}}}'
-  done
-fi
-# A repeated version must still roll pods to pick up the freshly pushed image.
-for service in "${services[@]}"; do
-  kubectl -n "$KUBE_NAMESPACE" rollout restart "deployment/$service"
   wait_deployment "$service"
 done
