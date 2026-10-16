@@ -15,13 +15,13 @@ kubectl 部署 Kubernetes。runner 工作目录由 GitHub Actions 设置为 `GIT
 - Secret `MYSQL_ROOT_PASSWORD`、`REDIS_PASSWORD`：可选；不配置时首次部署自动生成并复用集群 Secret
 - Variable `KUBE_NAMESPACE`：可选，默认 `one-adventure`
 
-推送到 `main` 会自动发布全部服务，版本默认为提交 SHA。
+工作流仅支持手动触发；提交或推送代码不会自动部署。
 
 手动发布：Actions → Build and Deploy to Kubernetes → Run workflow，选择代码分支后填写：
 
 - `service`：选择单个服务（如 `user`）或 `all`。
 - `image_tag`：必填版本号，如 `0.0.2`。
-- `xds_image_tag`：可选，覆盖 xds 版本；通常留空即可。
+xds 与其他服务统一使用 `image_tag` 版本号。
 
 例如 `service=user`、`image_tag=0.0.2` 只编译当前 checkout 的 user，构建并推送
 `15342537816/one_adventure_backend:user-0.0.2`，更新 user 配置并等待其部署完成。

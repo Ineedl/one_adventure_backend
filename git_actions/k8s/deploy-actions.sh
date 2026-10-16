@@ -16,21 +16,12 @@ esac
 deploy_only=false
 local_storage=false
 docker_config_file=${DOCKER_CONFIG_FILE:-}
-xds_image_tag=${XDS_IMAGE_TAG:-}
 positional=()
 while (($#)); do
   arg=$1
   case "$arg" in
     --deploy-only) deploy_only=true ;;
     --local-storage) local_storage=true ;;
-    --xds-tag)
-      if (($# < 2)) || [[ -z "$2" || "$2" == --* ]]; then
-        echo "error: --xds-tag requires an image version" >&2
-        exit 2
-      fi
-      xds_image_tag=$2
-      shift
-      ;;
     --docker-config)
       if (($# < 2)) || [[ -z "$2" || "$2" == --* ]]; then
         echo "error: --docker-config requires a file path" >&2
@@ -40,11 +31,10 @@ while (($#)); do
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] [--xds-tag TAG] IMAGE_REPOSITORY [IMAGE_TAG]"
+      echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] IMAGE_REPOSITORY [IMAGE_TAG]"
       echo '--local-storage creates retained node-local PVs for pending MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
       echo "--deploy-only skips binary builds, image builds, and image pushes."
       echo '--docker-config FILE imports Docker auth for Kubernetes image pulls (e.g. "$HOME/.docker/config.json").'
-      echo '--xds-tag TAG overrides the xds version for image pushes and deployment (also XDS_IMAGE_TAG).'
       echo 'MySQL/Redis passwords are generated automatically and reused from the cluster; environment variables override them.'
       echo 'Python 3 with PyYAML is required to render cluster configuration.'
       exit 0
@@ -67,8 +57,7 @@ if [[ -n "${1:-}" ]]; then IMAGE_REPOSITORY=$1; fi
 IMAGE_REPOSITORY=${IMAGE_REPOSITORY%/}
 [[ -n "$IMAGE_REPOSITORY" ]] || { echo "usage: $0 IMAGE_REPOSITORY [IMAGE_TAG]" >&2; exit 2; }
 if [[ -n "${2:-}" ]]; then IMAGE_TAG=$2; fi
-xds_image_tag=${xds_image_tag:-$IMAGE_TAG}
-for tag in "$IMAGE_TAG" "$xds_image_tag"; do
+for tag in "$IMAGE_TAG"; do
   [[ "$tag" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ && ${#tag} -le 116 ]] || {
     echo "error: invalid image version: $tag" >&2
     exit 2
@@ -125,7 +114,6 @@ if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
 fi
 for service in "${services[@]}"; do
   image_tag="$service-$IMAGE_TAG"
-  if [[ "$service" == xds ]]; then image_tag="xds-$xds_image_tag"; fi
   docker tag "one-adventure/$service:latest" "$IMAGE_REPOSITORY:$image_tag"
   docker push "$IMAGE_REPOSITORY:$image_tag"
 done
@@ -135,7 +123,7 @@ trap 'rm -rf "$render_dir"' EXIT
 python3 "$script_dir/render-config.py" "$CONFIG_ROOT" "$render_dir" "${services[@]}"
 cp "$script_dir"/*.yaml "$render_dir"/
 for file in "$render_dir"/*.yaml; do
-  sed -i "s|__IMAGE_REPOSITORY__|$IMAGE_REPOSITORY|g; s|__IMAGE_TAG__|$IMAGE_TAG|g; s|__XDS_IMAGE_TAG__|$xds_image_tag|g; s|__KUBE_NAMESPACE__|$KUBE_NAMESPACE|g; s|__HOST_GATEWAY_IP__|$HOST_GATEWAY_IP|g" "$file"
+  sed -i "s|__IMAGE_REPOSITORY__|$IMAGE_REPOSITORY|g; s|__IMAGE_TAG__|$IMAGE_TAG|g; s|__XDS_IMAGE_TAG__|$IMAGE_TAG|g; s|__KUBE_NAMESPACE__|$KUBE_NAMESPACE|g; s|__HOST_GATEWAY_IP__|$HOST_GATEWAY_IP|g" "$file"
 done
 if [[ "$selected_service" == all ]]; then
 kubectl apply -f "$render_dir/namespace.yaml"
