@@ -58,6 +58,19 @@ func FetchServerInfo(ctx context.Context, envoyAddress, name string) (*serverman
 	return nil, fmt.Errorf("server %q not found in server manager response", name)
 }
 
+func FetchChannelInfo(ctx context.Context, envoyAddress string, serverID uint64) ([]*servermanagerpb.ChannelInfo, error) {
+	conn, err := grpc.NewClient(envoyAddress, grpc.WithAuthority("ws_gateway"), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	resp, err := servermanagerpb.NewWsGatewayServiceClient(conn).ChannelInfoGet(ctx, &servermanagerpb.ChannelInfoGetReq{ServerId: serverID})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetChannels(), nil
+}
+
 func Acquire(ctx context.Context, cfg Config) (*Lease, string, error) {
 	if len(cfg.EtcdEndpoints) == 0 || cfg.EnvoyAddress == "" || cfg.Address == "" || cfg.WSPort < 1 || cfg.LeaseTTL <= 0 {
 		return nil, "", errors.New("invalid gate registration config")

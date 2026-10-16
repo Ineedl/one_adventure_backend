@@ -54,18 +54,17 @@ func (s *service) ChannelInfoGet(ctx context.Context, request *servermanagerpb.C
 		return nil, status.Error(codes.InvalidArgument, "server_id is required")
 	}
 	var rows []struct {
-		Id            uint64
-		Index         int
-		Name          string
-		ServerId      uint64
-		WsConnections int64
+		Id       uint64
+		Index    int
+		Name     string
+		ServerId uint64
 	}
-	if err := dao.ChannelInfo.Ctx(ctx).Fields("id,index,name,server_id,ws_connections").Where("server_id", request.GetServerId()).OrderAsc("index").Scan(&rows); err != nil {
+	if err := dao.ChannelInfo.Ctx(ctx).Fields("id,index,name,server_id").Where("server_id", request.GetServerId()).OrderAsc("index").Scan(&rows); err != nil {
 		return nil, err
 	}
 	resp := &servermanagerpb.ChannelInfoGetResp{}
 	for _, r := range rows {
-		resp.Channels = append(resp.Channels, &servermanagerpb.ChannelInfo{Id: r.Id, Index: int32(r.Index), Name: r.Name, ServerId: r.ServerId, WsConnections: r.WsConnections})
+		resp.Channels = append(resp.Channels, &servermanagerpb.ChannelInfo{Id: r.Id, Index: int32(r.Index), Name: r.Name, ServerId: r.ServerId})
 	}
 	return resp, nil
 }

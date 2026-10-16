@@ -50,7 +50,7 @@ var (
 				return err
 			}
 			defer proxy.Close()
-			if v, e := token.NewRS256VerifierFromFile("/app/key/public.pem", "one-adventure"); e == nil {
+			if v, e := token.NewRS256VerifierFromFile("/app/key/public.pem", "one-adventure-user"); e == nil {
 				wsproxy.SetVerifier(v)
 			} else {
 				return e

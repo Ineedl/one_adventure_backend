@@ -46,14 +46,19 @@ func (m *Manager) SetServerInfo(server ConnectServerInfo, channels []ConnectChan
 func (m *Manager) validConnectParams(params WsConnectParams) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if params.ServerInfo.ServerName == "" || params.ServerInfo.ServerName != m.server.ServerName {
+	if params.ServerInfo.ServerId == 0 || params.ServerInfo.ServerId != m.server.ServerId {
+		return false
+	}
+	if params.ServerInfo.ServerName != "" && params.ServerInfo.ServerName != m.server.ServerName {
 		return false
 	}
 	if params.ChannelInfo.ChannelId == 0 {
 		return false
 	}
 	channel, ok := m.channels[uint64(params.ChannelInfo.ChannelId)]
-	return ok && (params.ChannelInfo.ChannelName == "" || params.ChannelInfo.ChannelName == channel.ChannelName)
+	return ok &&
+		(params.ChannelInfo.ChannelIndex == 0 || params.ChannelInfo.ChannelIndex == channel.ChannelIndex) &&
+		(params.ChannelInfo.ChannelName == "" || params.ChannelInfo.ChannelName == channel.ChannelName)
 }
 
 // SetRequestHandler replaces the handler for requests received from clients.

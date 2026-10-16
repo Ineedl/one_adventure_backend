@@ -13,6 +13,7 @@ import (
 
 	"github.com/gogf/gf/v2/net/ghttp"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	obslog "one_adventure_observability_log"
 	"one_adventure_servicekit/api-contract/gateway_server_discovery"
 	"one_adventure_servicekit/token"
 )
@@ -44,15 +45,18 @@ func (p *Proxy) Handle(request *ghttp.Request) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	obslog.Info(r.Context(), "websocket proxy request", map[string]any{"path": r.URL.Path, "remote_addr": r.RemoteAddr})
 	value := r.URL.Query().Get("token")
 	if value == "" {
 		value = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
 	if verifier == nil || value == "" {
+		obslog.Warn(r.Context(), "websocket proxy authentication rejected")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if _, err := verifier.VerifyAndParse(value); err != nil {
+		obslog.Warn(r.Context(), "websocket proxy token invalid", map[string]any{"error": err.Error()})
 		http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 		return
 	}
@@ -74,6 +78,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(resp.Kvs) == 0 {
+		obslog.Warn(r.Context(), "gate server registration not found", map[string]any{"server_id": serverID})
 		http.Error(w, "gate server is offline", http.StatusServiceUnavailable)
 		return
 	}
@@ -87,6 +92,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	original := proxy.Director
 	proxy.Director = func(req *http.Request) { original(req); req.URL.Path = "/ws" }
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+		obslog.Error(r.Context(), "gate server websocket proxy failed", map[string]any{"server_id": serverID})
 		http.Error(w, "gate server unavailable", http.StatusBadGateway)
 	}
 	proxy.ServeHTTP(w, r)

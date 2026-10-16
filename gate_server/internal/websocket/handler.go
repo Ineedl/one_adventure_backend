@@ -10,6 +10,7 @@ import (
 	gorillaws "github.com/gorilla/websocket"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	obslog "one_adventure_observability_log"
 	tracekit "one_adventure_observability_trace/trace"
 )
 
@@ -36,10 +37,12 @@ func newHandler(cfg WsConfig, manager *Manager) *Handler {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	params, err := parseConnectParams(r)
 	if err != nil {
+		obslog.Warn(r.Context(), "websocket connect params rejected", map[string]any{"error": err.Error(), "remote_addr": r.RemoteAddr})
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if !h.manager.validConnectParams(params) {
+		obslog.Warn(r.Context(), "websocket server or channel rejected", map[string]any{"server_id": params.ServerInfo.ServerId, "channel_id": params.ChannelInfo.ChannelId})
 		http.Error(w, "invalid server or channel", http.StatusBadRequest)
 		return
 	}
@@ -51,9 +54,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.Log().Warningf(r.Context(), "websocket upgrade failed: %v", err)
 		return
 	}
+	obslog.Info(r.Context(), "websocket connection established", map[string]any{"connection_id": connectionID, "server_id": params.ServerInfo.ServerId, "channel_id": params.ChannelInfo.ChannelId})
 	connection := newConnection(r.Context(), connectionID, params, conn, h.manager.remove)
 	h.manager.add(connection)
 	defer connection.Close()
+	defer obslog.Info(r.Context(), "websocket connection closed", map[string]any{"connection_id": connectionID})
 
 	conn.SetReadLimit(h.maxMessageSize)
 	for {
