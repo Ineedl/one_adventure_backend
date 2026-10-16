@@ -21,6 +21,12 @@ kubectl 部署 Kubernetes。runner 工作目录由 GitHub Actions 设置为 `GIT
 
 - `service`：选择单个服务（如 `user`）或 `all`。
 - `image_tag`：必填版本号，如 `0.0.2`。
+- `deploy_only`：默认不勾选，执行编译、镜像构建、推送和部署；勾选后直接部署仓库中指定版本的已有镜像。
+
+仅部署模式仍会应用所选分支中的 Kubernetes 清单和服务配置，保留静态 PV 和部署超时逻辑。
+该模式跳过 Go/Compose 构建工具检查及 GoFrame CLI 安装，仍登录 Docker Hub 以配置 Kubernetes 私有镜像拉取凭据。
+所选服务（或 `all` 对应全部服务）的指定版本镜像必须已存在。
+
 xds 与其他服务统一使用 `image_tag` 版本号。
 
 例如 `service=user`、`image_tag=0.0.2` 只编译当前 checkout 的 user，构建并推送
@@ -136,8 +142,7 @@ bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
 已绑定的 PVC 保持原存储，现有 PVC 无需删除；多节点集群必须通过 STORAGE_NODE_NAME
 指定存储节点。此模式需要创建集群级 PV 的权限，节点磁盘需有足够空间，PVC 容量声明
 不会限制 hostPath 实际用量。节点故障时数据不会自动迁移。
-PV 使用 Retain 策略，因此 `cleanup.sh --delete-data` 删除 PVC 后，节点目录和 PV 仍会保留，
-脚本不会将旧 PV 自动绑定给新 PVC；重新使用前需人工核对旧数据及 PV 归属。
+PV 使用 Retain 策略。普通清理保留 PVC 和 PV；`cleanup.sh --delete-data` 会删除 PVC 及经过归属校验的项目静态 PV，节点数据目录仍保留。部署脚本可在归属和存储配置一致时复用同名 PVC 的保留卷。
 
 两个 Deployment 都使用 Recreate，避免更新时多个实例同时写入同一个数据卷。
 MySQL 8 首次初始化可能需要几十秒，启动探针会等待 30 秒后使用 `mysqladmin ping`
@@ -205,7 +210,7 @@ bash git_actions/k8s/cleanup.sh --delete-data
 默认保留 namespace、MySQL/Redis PVC 和 `middleware-auth` Secret，重新部署时复用已有
 数据和密码。指定 `--delete-data` 后，先清理服务，再删除 `mysql-data`、`redis-data` PVC
 及 `middleware-auth` Secret；下次部署会重新生成密码。PVC 的删除可能永久清除数据，
-底层 PV 按存储的 reclaimPolicy 回收，Retain 类型 PV 不会被脚本直接删除。
+项目静态 PV（`<namespace>-mysql-data`、`<namespace>-redis-data`）通过归属和目录校验后也会删除；其他 PV 按 reclaimPolicy 回收。节点 hostPath 文件不会删除，旧 MySQL 数据仍需原密码，不能靠删除 PV 重置数据库。
 namespace 始终保留。etcd、Kafka 当前使用临时存储，清理 Pod 会丢失其中数据。
 脚本仅允许清理带有 `app.kubernetes.io/part-of=one-adventure` 标签的项目 namespace，
 该标签由部署清单自动设置。namespace 或资源不存在时跳过，支持重复执行。
@@ -234,3 +239,15 @@ Actions 默认传入 `--local-storage`，为尚未绑定的 MySQL/Redis PVC 创�
 可在 Actions Variables 设置 `PVC_TIMEOUT_SECONDS` 和 `ROLLOUT_TIMEOUT_SECONDS`（正整数秒）。
 包含构建、推送和部署的步骤最多运行 45 分钟，整个 job 最多运行 60 分钟。
 静态卷文件保存在指定节点，节点必须允许创建上述数据目录。
+
+### Gateway HTTP 外部访问
+
+Gateway Service 使用持久的 NodePort：`http://<Kubernetes节点IP>:30901`，
+转发到 gateway Pod 的 HTTP 端口 `8901`。由清单 `stack.yaml` 管理，Pod 重建或再次部署后仍然生效。
+GitHub Actions 手动选择 `gateway` 或 `all` 部署即可应用此配置。
+集群内部仍使用 `gateway:8901`。节点防火墙或云安全组需允许客户端访问 TCP 30901。
+
+```sh
+kubectl -n one-adventure get svc gateway
+kubectl get nodes -o wide
+```

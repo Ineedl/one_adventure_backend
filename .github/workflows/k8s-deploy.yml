@@ -25,6 +25,11 @@ on:
         description: Version to build and deploy (e.g. 0.0.2)
         required: true
         type: string
+      deploy_only:
+        description: Only deploy existing images (skip compilation, image build and push)
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: one-adventure-k8s
@@ -66,13 +71,19 @@ jobs:
         run: |
           set -euo pipefail
           command -v docker
-          docker compose version
           command -v kubectl
-          command -v go
           command -v python3
           python3 -c 'import yaml'
 
+      - name: Verify build tools
+        if: ${{ !inputs.deploy_only }}
+        run: |
+          set -euo pipefail
+          command -v go
+          docker compose version
+
       - name: Install GoFrame CLI
+        if: ${{ !inputs.deploy_only }}
         run: |
           set -euo pipefail
           if ! command -v gf >/dev/null 2>&1; then
@@ -92,11 +103,17 @@ jobs:
 
       - name: Build, push and deploy
         timeout-minutes: 45
+        env:
+          DEPLOY_ONLY: ${{ inputs.deploy_only }}
         run: |
           set -euo pipefail
+          args=(--local-storage --docker-config "$HOME/.docker/config.json")
+          if [[ "$DEPLOY_ONLY" == true ]]; then
+            args+=(--deploy-only)
+            echo "Deploy existing images: $DEPLOY_SERVICE / $IMAGE_TAG"
+          fi
           bash "$GITHUB_WORKSPACE/git_actions/k8s/deploy-runner.sh" \
-            --local-storage \
-            --docker-config "$HOME/.docker/config.json" \
+            "${args[@]}" \
             "$IMAGE_REPOSITORY" "$IMAGE_TAG"
 
       - name: Show deployed workloads
