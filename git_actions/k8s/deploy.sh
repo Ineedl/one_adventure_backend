@@ -7,6 +7,7 @@ project_dir=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 : "${IMAGE_TAG:=${GITHUB_SHA:-$(git -C "$project_dir" rev-parse HEAD)}}"
 : "${KUBE_NAMESPACE:=one-adventure}"
 deploy_only=false
+local_storage=false
 docker_config_file=${DOCKER_CONFIG_FILE:-}
 xds_image_tag=${XDS_IMAGE_TAG:-}
 positional=()
@@ -14,6 +15,7 @@ while (($#)); do
   arg=$1
   case "$arg" in
     --deploy-only) deploy_only=true ;;
+    --local-storage) local_storage=true ;;
     --xds-tag)
       if (($# < 2)) || [[ -z "$2" || "$2" == --* ]]; then
         echo "error: --xds-tag requires an image version" >&2
@@ -31,7 +33,8 @@ while (($#)); do
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 [--deploy-only] [--docker-config FILE] [--xds-tag TAG] IMAGE_REPOSITORY [IMAGE_TAG]"
+      echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] [--xds-tag TAG] IMAGE_REPOSITORY [IMAGE_TAG]"
+      echo '--local-storage creates retained node-local PVs for pending MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
       echo "--deploy-only skips binary builds, image builds, and image pushes."
       echo '--docker-config FILE imports Docker auth for Kubernetes image pulls (e.g. "$HOME/.docker/config.json").'
       echo '--xds-tag TAG overrides the xds version for image pushes and deployment (also XDS_IMAGE_TAG).'
@@ -140,8 +143,16 @@ kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --from-file=server.properties="$project_dir/one_adventure/kafka/server.properties" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f "$render_dir/middleware.yaml"
+if [[ "$local_storage" == true ]]; then
+  KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
+fi
 for middleware in mysql redis; do
-  kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$middleware" --timeout=10m
+  if ! kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$middleware" --timeout=10m; then
+    kubectl -n "$KUBE_NAMESPACE" get pvc -o wide || true
+    kubectl -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
+    echo 'Check PVC storage binding; single-node clusters without a provisioner can use --local-storage.' >&2
+    exit 1
+  fi
 done
 kubectl apply -f "$render_dir/stack.yaml"
 kubectl apply -f "$render_dir/applications.yaml"

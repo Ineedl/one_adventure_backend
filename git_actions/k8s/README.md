@@ -2,6 +2,34 @@
 
 ## Kubernetes 服务范围
 
+## GitHub Actions CI/CD
+
+`.github/workflows/k8s-deploy.yml` 使用已运行的 self-hosted runner 执行完整链路：
+checkout 所选分支的当前提交、构建指定服务、推送到 `15342537816/one_adventure_backend`，再通过
+kubectl 部署 Kubernetes。runner 工作目录由 GitHub Actions 设置为 `GITHUB_WORKSPACE`，
+`deploy-runner.sh` 会从该 checkout 调用独立副本 `deploy-actions.sh`（原 `deploy.sh` 保留），不使用 runner 安装目录中的旧源码。
+
+在仓库 Settings -> Secrets and variables -> Actions 中配置：
+
+- Secret `REGISTRY_USERNAME`、`REGISTRY_PASSWORD`：Docker Hub 登录凭据
+- Secret `MYSQL_ROOT_PASSWORD`、`REDIS_PASSWORD`：可选；不配置时首次部署自动生成并复用集群 Secret
+- Variable `KUBE_NAMESPACE`：可选，默认 `one-adventure`
+
+推送到 `main` 会自动发布全部服务，版本默认为提交 SHA。
+
+手动发布：Actions → Build and Deploy to Kubernetes → Run workflow，选择代码分支后填写：
+
+- `service`：选择单个服务（如 `user`）或 `all`。
+- `image_tag`：必填版本号，如 `0.0.2`。
+- `xds_image_tag`：可选，覆盖 xds 版本；通常留空即可。
+
+例如 `service=user`、`image_tag=0.0.2` 只编译当前 checkout 的 user，构建并推送
+`15342537816/one_adventure_backend:user-0.0.2`，更新 user 配置并等待其部署完成。
+单服务发布要求集群已完成首次全量部署，复用 `middleware-auth` 中的密码。
+选择 `all` 则发布全部 11 个应用并应用中间件清单。重复使用相同版本号也会重新拉取镜像并更新 Pod。
+同一集群的发布串行执行，防止单服务与全量发布相互覆盖。
+runner 必须已配置 Docker、kubectl、Go、Python 3/PyYAML，并且 kubeconfig 当前身份有目标集群部署权限。
+
 部署脚本发布全部 11 个应用镜像对应的服务：gateway、gate-server、computing、
 user、item、commerce、ws-gateway、order、pay、promotion、xds，以及 etcd、Kafka、Envoy、
 MySQL 8.0 和 Redis 7.4。gateway 默认两个副本，其余各一个，稳定后预期有 17 个 Pod。
@@ -26,7 +54,8 @@ kubectl get deployments,pods -n one-adventure
 `--deploy-only` 跳过编译、镜像构建和推送。所有对应版本镜像必须已存在。
 此模式需要 kubectl、Python 3 和 PyYAML，无需 Docker 和 gf。
 
-当前 xds 已修复的镜像为 `xds-0.0.2`，其他应用仍使用 `0.0.1` 时，部署需指定：
+当前 xds 镜像使用绝对路径启动 `/app/main`，并基于 Alpine 3.20 构建。重新构建后建议使用
+新的 xds 版本标签；其他应用仍使用 `0.0.1` 时，部署需指定：
 
 ```sh
 bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
@@ -36,6 +65,19 @@ bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
 `--xds-tag`（或环境变量 `XDS_IMAGE_TAG`）单独指定 xds 版本，默认使用公共
 IMAGE_TAG；完整构建发布时，xds 的推送标签也使用该版本。
 不要省略这个覆盖参数后再次部署旧的 `0.0.1`，否则会覆盖集群中的 xds 修复版本。
+
+可以覆盖推送已有的 `xds-0.0.1` 标签。xds Deployment 已设置
+`imagePullPolicy: Always`，覆盖推送后执行滚动重启即可拉取新镜像：
+
+```sh
+docker tag one-adventure/xds:latest 15342537816/one_adventure_backend:xds-0.0.1
+docker push 15342537816/one_adventure_backend:xds-0.0.1
+kubectl -n one-adventure rollout restart deployment/xds
+kubectl -n one-adventure rollout status deployment/xds --timeout=5m
+```
+
+也可以重新执行部署脚本并指定 `--xds-tag 0.0.1`；相同镜像标签不会自动触发更新，
+因此覆盖后仍建议执行 `rollout restart`。
 
 Deployment 会自动补齐期望副本，直接删除失败 Pod 会使其重建。
 xds 滚动更新卡住时可能同时保留新旧 Pod，应修正 Deployment 的镜像版本。
@@ -80,7 +122,26 @@ etcd 与 Kafka 当前未配置持久卷；生产使用前需要添加持久化�
 
 `middleware.yaml` 部署 MySQL `mysql:8.0` 和 Redis `redis:7.4-alpine`，分别使用
 10Gi 和 1Gi 的 PVC；Redis 开启 AOF。集群需有默认 StorageClass，或预先提供匹配的 PV。
+若出现 `pod has unbound immediate PersistentVolumeClaims`，表示 PVC 尚未绑定存储，
+可通过 `kubectl get storageclass`、`kubectl describe pvc mysql-data -n one-adventure` 查看原因。
+没有动态存储的单节点集群可直接重新部署并添加 `--local-storage`：
+
+```sh
+bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
+  --deploy-only --xds-tag 0.0.2 --local-storage
+```
+
+该参数为尚未绑定的 MySQL/Redis PVC 创建静态 hostPath PV，数据目录为节点上的
+`/var/lib/one-adventure/<namespace>/mysql-data` 和 `redis-data`，并设置节点亲和性。
+已绑定的 PVC 保持原存储，现有 PVC 无需删除；多节点集群必须通过 STORAGE_NODE_NAME
+指定存储节点。此模式需要创建集群级 PV 的权限，节点磁盘需有足够空间，PVC 容量声明
+不会限制 hostPath 实际用量。节点故障时数据不会自动迁移。
+PV 使用 Retain 策略，因此 `cleanup.sh --delete-data` 删除 PVC 后，节点目录和 PV 仍会保留，
+脚本不会将旧 PV 自动绑定给新 PVC；重新使用前需人工核对旧数据及 PV 归属。
+
 两个 Deployment 都使用 Recreate，避免更新时多个实例同时写入同一个数据卷。
+MySQL 8 首次初始化可能需要几十秒，启动探针会等待 30 秒后使用 `mysqladmin ping`
+检查服务，最多允许 10 分钟完成初始化；启动期间出现少量 `ERROR 2003` 探针事件属于正常现象。
 脚本等待两者健康检查通过后，才提交应用清单。
 
 密码存储在 `middleware-auth` Secret。MySQL 首次启动自动创建 `test`、
@@ -98,6 +159,25 @@ kubectl get deployments,pods,svc,pvc -n one-adventure
 kubectl logs deployment/mysql -n one-adventure
 kubectl logs deployment/redis -n one-adventure
 ```
+
+## 本地端口转发
+
+运行脚本后，MySQL 和 Redis 会临时暴露到本机回环地址；脚本保持前台运行，按 `Ctrl-C`
+会自动结束两个转发进程，不创建或修改 Kubernetes 资源：
+
+```sh
+bash git_actions/k8s/port-forward-middleware.sh
+```
+
+默认连接地址：MySQL `127.0.0.1:13306`，Redis `127.0.0.1:16379`。可自定义本地端口：
+
+```sh
+bash git_actions/k8s/port-forward-middleware.sh \
+  --mysql-port 3307 --redis-port 6380
+```
+
+也可以使用 `MYSQL_LOCAL_PORT`、`REDIS_LOCAL_PORT` 和 `KUBE_NAMESPACE` 环境变量。
+脚本要求目标 namespace 中已存在 `mysql` 和 `redis` Service，并使用当前 kubectl context。
 
 ## 清理部署
 

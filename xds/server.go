@@ -26,6 +26,7 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/server/v3"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var runtimeLogger *observabilitylog.Logger
@@ -56,7 +57,14 @@ type Config struct {
 	// DialTimeout 是连接 etcd 的超时时间。
 	DialTimeout time.Duration
 	// Services 可选，用于限制只下发指定服务的配置。
-	Services []string
+	Services        []string
+	CircuitBreakers map[string]CircuitBreakerConfig
+}
+type CircuitBreakerConfig struct {
+	MaxConnections     uint32 `yaml:"max_connections"`
+	MaxPendingRequests uint32 `yaml:"max_pending_requests"`
+	MaxRequests        uint32 `yaml:"max_requests"`
+	MaxRetries         uint32 `yaml:"max_retries"`
 }
 
 // Run 启动 xDS gRPC 服务，并持续从 etcd 刷新配置快照直到 ctx 结束。
@@ -118,20 +126,20 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	defer ln.Close()
 	log.Printf("xds: listening for Envoy xDS on %s", ln.Addr())
-	go watch(ctx, ec, cache, cfg.Services)
+	go watch(ctx, ec, cache, cfg.Services, cfg.CircuitBreakers)
 	// GracefulStop 等待已有 xDS 流退出，避免进程关闭时直接中断 Envoy。
 	go func() { <-ctx.Done(); g.GracefulStop() }()
 	return g.Serve(ln)
 }
 
-func watch(ctx context.Context, ec *clientv3.Client, c cache.SnapshotCache, services []string) {
+func watch(ctx context.Context, ec *clientv3.Client, c cache.SnapshotCache, services []string, cb map[string]CircuitBreakerConfig) {
 	// 先生成初始快照，再在 etcd 发生变更时重新生成并推送。
 	prefixes := services
 	if len(prefixes) == 0 {
 		prefixes = []string{"*"}
 	}
 	for {
-		snap := buildSnapshot(ctx, ec, prefixes)
+		snap := buildSnapshot(ctx, ec, prefixes, cb)
 		if snap != nil {
 			// SetSnapshot 发布新版本，正在订阅的 Envoy 会立即收到增量变化。
 			c.SetSnapshot(ctx, envoyNodeID, snap)
@@ -146,7 +154,7 @@ func watch(ctx context.Context, ec *clientv3.Client, c cache.SnapshotCache, serv
 				break
 			}
 			log.Printf("xds: etcd event received revision=%d", r.Header.Revision)
-			snap = buildSnapshot(ctx, ec, prefixes)
+			snap = buildSnapshot(ctx, ec, prefixes, cb)
 			if snap != nil {
 				c.SetSnapshot(ctx, envoyNodeID, snap)
 				log.Printf("xds: snapshot published services=%s", snapshotServices(prefixes))
@@ -160,7 +168,7 @@ func watch(ctx context.Context, ec *clientv3.Client, c cache.SnapshotCache, serv
 	}
 }
 
-func buildSnapshot(ctx context.Context, ec *clientv3.Client, services []string) *cache.Snapshot {
+func buildSnapshot(ctx context.Context, ec *clientv3.Client, services []string, cb map[string]CircuitBreakerConfig) *cache.Snapshot {
 	// 注册包负责约定键值格式，xDS 只负责将实例转换为 Envoy 的 CDS/EDS 资源。
 	// WithPrefix 让 etcd Get 一次读取注册根路径下的全部实例。x
 	resp, err := ec.Get(ctx, discovery.RootPrefix+"/", clientv3.WithPrefix())
@@ -206,7 +214,14 @@ func buildSnapshot(ctx context.Context, ec *clientv3.Client, services []string) 
 	endpoints := []types.Resource{}
 	for n := range names {
 		// Cluster 使用 EDS 发现实例，并启用 HTTP/2 以承载微服务 gRPC 请求。
-		clusters = append(clusters, &cluster.Cluster{Name: n, ClusterDiscoveryType: &cluster.Cluster_Type{Type: cluster.Cluster_EDS}, Http2ProtocolOptions: &core.Http2ProtocolOptions{}, EdsClusterConfig: &cluster.Cluster_EdsClusterConfig{ServiceName: n, EdsConfig: &core.ConfigSource{ConfigSourceSpecifier: &core.ConfigSource_Ads{Ads: &core.AggregatedConfigSource{}}}}})
+		c := &cluster.Cluster{Name: n, ClusterDiscoveryType: &cluster.Cluster_Type{Type: cluster.Cluster_EDS}, Http2ProtocolOptions: &core.Http2ProtocolOptions{}, EdsClusterConfig: &cluster.Cluster_EdsClusterConfig{ServiceName: n, EdsConfig: &core.ConfigSource{ConfigSourceSpecifier: &core.ConfigSource_Ads{Ads: &core.AggregatedConfigSource{}}}}}
+		if v, ok := cb[n]; !ok {
+			v = cb["default"]
+			c.CircuitBreakers = &cluster.CircuitBreakers{Thresholds: []*cluster.CircuitBreakers_Thresholds{{MaxConnections: wrapperspb.UInt32(v.MaxConnections), MaxPendingRequests: wrapperspb.UInt32(v.MaxPendingRequests), MaxRequests: wrapperspb.UInt32(v.MaxRequests), MaxRetries: wrapperspb.UInt32(v.MaxRetries)}}}
+		} else {
+			c.CircuitBreakers = &cluster.CircuitBreakers{Thresholds: []*cluster.CircuitBreakers_Thresholds{{MaxConnections: wrapperspb.UInt32(v.MaxConnections), MaxPendingRequests: wrapperspb.UInt32(v.MaxPendingRequests), MaxRequests: wrapperspb.UInt32(v.MaxRequests), MaxRetries: wrapperspb.UInt32(v.MaxRetries)}}}
+		}
+		clusters = append(clusters, c)
 		endpoints = append(endpoints, &endpoint.ClusterLoadAssignment{ClusterName: n, Endpoints: localityLbEndpoints(eps[n])})
 	}
 	// NewSnapshot 使用 etcd revision 作为版本号，保证 CDS 与 EDS 同版本发布。

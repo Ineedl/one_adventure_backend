@@ -20,3 +20,5 @@ logger:
 database:
   default:
     link: "mysql:root:12345678@tcp(host.docker.internal:3306)/test"
+redis:
+  default: {address: "host.docker.internal:6379", pass: "123456"}

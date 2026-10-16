@@ -44,13 +44,14 @@ if (($# == 0)) || [[ "${1:-}" == "all" ]]; then
         echo "error: 'all' cannot be combined with service names" >&2
         exit 2
     fi
-    compose_services=(xds gateway gate-server computing user item commerce ws-gateway order pay promotion nginx-lb)
+    compose_services=(xds gateway gate-server gate-server-2 computing user item commerce ws-gateway order pay promotion nginx-lb)
 else
     compose_services=()
     start_nginx=false
     for service in "$@"; do
         case "$service" in
             gate_server) compose_services+=("gate-server") ;;
+            gate_server_2|gate-server-2) compose_services+=("gate-server-2") ;;
             ws_gateway|ws-gateway) compose_services+=("ws-gateway") ;;
             nginx)
                 compose_services+=("nginx-lb" "nginx-node-1" "nginx-node-2" "nginx-node-3")

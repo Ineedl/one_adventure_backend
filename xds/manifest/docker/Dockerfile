@@ -1,6 +1,7 @@
-FROM loads/alpine:3.8
-ENV WORKDIR=/app
-ADD ./temp/linux_amd64/main $WORKDIR/main
-RUN chmod +x $WORKDIR/main
-WORKDIR $WORKDIR
-CMD ["./main"]
+FROM alpine:3.20
+
+WORKDIR /app
+COPY temp/linux_amd64/main /app/main
+RUN chmod 0755 /app/main
+
+ENTRYPOINT ["/app/main"]

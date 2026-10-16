@@ -93,6 +93,7 @@ spec:
       containers:
         - name: xds
           image: __IMAGE_REPOSITORY__:xds-__XDS_IMAGE_TAG__
+          imagePullPolicy: Always
           env: [{name: XDS_CONFIG, value: /app/config.yaml}, {name: ETCD_ENDPOINTS, value: etcd:2379}]
           ports: [{containerPort: 18000}]
           volumeMounts: [{name: config, mountPath: /app/config.yaml, subPath: config.yaml}]

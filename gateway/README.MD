@@ -12,7 +12,7 @@ GoFrame 进程中。端口和路由等参数位于 `manifest/config/config.yaml`
 启动项目：
 
 ```bash
-go run .
+go run -buildvcs=false .
 ```
 
 默认连接地址为 `ws://localhost:8080/ws`。握手响应头

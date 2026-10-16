@@ -4,4 +4,68 @@ etcd:
 listen:
   address: "0.0.0.0"
   port: 18000
-services: ["gateway", "computing", "user", "item", "ws_gateway", "promotion"]
+services:
+  - gate
+  - gate_server
+  - ws_gateway
+  - item
+  - order
+  - pay
+  - promotion
+  - user
+circuit_breakers:
+  default:
+    max_connections: 100
+    max_pending_requests: 100
+    max_requests: 200
+    max_retries: 2
+  gateway:
+    max_connections: 200
+    max_pending_requests: 200
+    max_requests: 500
+    max_retries: 2
+  computing:
+    max_connections: 100
+    max_pending_requests: 200
+    max_requests: 500
+    max_retries: 2
+  user:
+    max_connections: 100
+    max_pending_requests: 200
+    max_requests: 500
+    max_retries: 2
+  item:
+    max_connections: 100
+    max_pending_requests: 200
+    max_requests: 500
+    max_retries: 2
+  ws_gateway:
+    max_connections: 1000
+    max_pending_requests: 10
+    max_requests: 1000
+    max_retries: 0
+  promotion:
+    max_connections: 100
+    max_pending_requests: 100
+    max_requests: 200
+    max_retries: 1
+  gate:
+    max_connections: 100
+    max_pending_requests: 100
+    max_requests: 200
+    max_retries: 1
+  gate_server:
+    max_connections: 1000
+    max_pending_requests: 10
+    max_requests: 1000
+    max_retries: 0
+  order:
+    max_connections: 50
+    max_pending_requests: 50
+    max_requests: 100
+    max_retries: 0
+  pay:
+    max_connections: 50
+    max_pending_requests: 50
+    max_requests: 100
+    max_retries: 0

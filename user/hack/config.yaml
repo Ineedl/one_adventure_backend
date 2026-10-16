@@ -2,6 +2,9 @@
 # CLI tool, only in development environment.
 # https://goframe.org/docs/cli
 gfcli:
+  build:
+    extra: "-buildvcs=false"
+
   gen:
     dao:
       - link: "mysql:root:zxc563221659@tcp(127.0.0.1:3306)/one_adventure_user"

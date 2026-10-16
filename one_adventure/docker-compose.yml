@@ -30,7 +30,16 @@ services:
     container_name: one-adventure-gate-server
     restart: unless-stopped
     expose: ["8902"]
-    depends_on: [etcd]
+    depends_on: [etcd, ws-gateway, envoy]
+
+  gate-server-2:
+    build: {context: ../gate_server, dockerfile: manifest/docker/Dockerfile}
+    image: one-adventure/gate-server:latest
+    volumes: ["../gate_server/manifest/config-docker:/app/config:ro"]
+    container_name: one-adventure-gate-server-2
+    restart: unless-stopped
+    expose: ["8902"]
+    depends_on: [etcd, ws-gateway, envoy]
 
   computing:
     build: {context: ../computing, dockerfile: manifest/docker/Dockerfile}
@@ -78,6 +87,7 @@ services:
     restart: unless-stopped
     expose: ["8000", "9004"]
     depends_on: [etcd]
+    networks: [default, nginx-lab]
 
   order:
     build: {context: ../order, dockerfile: manifest/docker/Dockerfile}
@@ -123,6 +133,7 @@ services:
       - "8080:80"
     networks:
       - nginx-lab
+      - default
 
   nginx-node-1:
     <<: &nginx-node

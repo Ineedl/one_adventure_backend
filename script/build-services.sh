@@ -4,6 +4,9 @@
 # Usage: script/build-services.sh [all|service ...]
 set -euo pipefail
 
+# Disable Git metadata collection for every Go build, including gf subprocesses.
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-buildvcs=false"
+
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
@@ -65,7 +68,7 @@ for service in "${requested[@]}"; do
         cd "$service_dir"
         if [[ "$service" == xds ]]; then
             # Alpine has no glibc loader. Produce a standalone executable.
-            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o temp/linux_amd64/main ./cmd/xds
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -o temp/linux_amd64/main ./cmd/xds
         else
             gf build -a amd64 -s linux -p temp
         fi

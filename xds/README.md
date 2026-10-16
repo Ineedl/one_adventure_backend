@@ -4,7 +4,7 @@ xDS 作为宿主机上的独立进程运行，不由 Docker Compose 管理。它
 
 ```bash
 docker compose -f one_adventure/one_adventure.yml up -d etcd
-cd xds && go run ./cmd/xds
+cd xds && go run -buildvcs=false ./cmd/xds
 docker compose -f one_adventure/one_adventure.yml up -d envoy
 ```
 

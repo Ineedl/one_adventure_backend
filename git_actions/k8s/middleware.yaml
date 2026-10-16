@@ -54,15 +54,17 @@ spec:
           ports: [{name: mysql, containerPort: 3306}]
           startupProbe:
             exec:
-              command: [sh, -ec, 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -h 127.0.0.1 -uroot -e "SELECT 1"']
+              command: [sh, -ec, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent']
+            initialDelaySeconds: 30
             periodSeconds: 5
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 120
           readinessProbe:
             exec:
-              command: [sh, -ec, 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -h 127.0.0.1 -uroot -e "SELECT 1"']
+              command: [sh, -ec, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent']
+            initialDelaySeconds: 5
             periodSeconds: 5
-            timeoutSeconds: 3
+            timeoutSeconds: 5
           livenessProbe:
             tcpSocket: {port: mysql}
             periodSeconds: 10

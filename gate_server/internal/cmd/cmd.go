@@ -89,8 +89,14 @@ var (
 				return e
 			}
 			cachedServer := websocket.ConnectServerInfo{ServerId: int64(serverInfo.GetId()), ServerName: serverInfo.GetName()}
-			cachedChannels := make([]websocket.ConnectChannelInfo, 0, len(serverInfo.GetChannels()))
-			for _, channel := range serverInfo.GetChannels() {
+			channels, e := registration.FetchChannelInfo(ctx, regCfg.EnvoyAddress, serverInfo.GetId())
+			if e != nil {
+				_ = lease.Release(context.Background())
+				_ = server.Shutdown()
+				return e
+			}
+			cachedChannels := make([]websocket.ConnectChannelInfo, 0, len(channels))
+			for _, channel := range channels {
 				cachedChannels = append(cachedChannels, websocket.ConnectChannelInfo{ChannelId: int64(channel.GetId()), ChannelIndex: int(channel.GetIndex()), ChannelName: channel.GetName()})
 			}
 			server.Manager().SetServerInfo(cachedServer, cachedChannels)

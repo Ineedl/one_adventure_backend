@@ -24,7 +24,8 @@ type fileConfig struct {
 		Address string `yaml:"address"`
 		Port    int    `yaml:"port"`
 	} `yaml:"listen"`
-	Services []string `yaml:"services"`
+	Services        []string                            `yaml:"services"`
+	CircuitBreakers map[string]xds.CircuitBreakerConfig `yaml:"circuit_breakers"`
 }
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 	if endpoints := os.Getenv("ETCD_ENDPOINTS"); endpoints != "" {
 		cfg.Etcd.Endpoints = strings.Split(endpoints, ",")
 	}
-	if err := xds.Run(ctx, xds.Config{Endpoints: cfg.Etcd.Endpoints, DialTimeout: cfg.Etcd.DialTimeout, ListenAddress: cfg.Listen.Address, ListenPort: cfg.Listen.Port, Services: cfg.Services}); err != nil {
+	if err := xds.Run(ctx, xds.Config{Endpoints: cfg.Etcd.Endpoints, DialTimeout: cfg.Etcd.DialTimeout, ListenAddress: cfg.Listen.Address, ListenPort: cfg.Listen.Port, Services: cfg.Services, CircuitBreakers: cfg.CircuitBreakers}); err != nil {
 		log.Fatal(err)
 	}
 }
