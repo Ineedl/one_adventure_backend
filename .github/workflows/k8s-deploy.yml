@@ -34,6 +34,9 @@ env:
   IMAGE_REPOSITORY: 15342537816/one_adventure_backend
   KUBE_NAMESPACE: ${{ vars.KUBE_NAMESPACE || 'one-adventure' }}
   IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+  ROLLOUT_TIMEOUT_SECONDS: ${{ vars.ROLLOUT_TIMEOUT_SECONDS || '300' }}
+  PVC_TIMEOUT_SECONDS: ${{ vars.PVC_TIMEOUT_SECONDS || '120' }}
+  STORAGE_NODE_NAME: ${{ vars.STORAGE_NODE_NAME || '' }}
   DEPLOY_SERVICE: ${{ inputs.service || 'all' }}
   MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD || '' }}
   REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || '' }}
@@ -88,12 +91,15 @@ jobs:
           echo "$REGISTRY_PASSWORD" | docker login --username "$REGISTRY_USERNAME" --password-stdin
 
       - name: Build, push and deploy
+        timeout-minutes: 45
         run: |
           set -euo pipefail
           bash "$GITHUB_WORKSPACE/git_actions/k8s/deploy-runner.sh" \
+            --local-storage \
             --docker-config "$HOME/.docker/config.json" \
             "$IMAGE_REPOSITORY" "$IMAGE_TAG"
 
       - name: Show deployed workloads
         if: always()
-        run: kubectl get deployments,pods,svc,pvc -n "$KUBE_NAMESPACE" -o wide
+        timeout-minutes: 1
+        run: kubectl --request-timeout=20s get deployments,pods,svc,pvc -n "$KUBE_NAMESPACE" -o wide

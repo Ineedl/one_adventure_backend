@@ -6,6 +6,29 @@ project_dir=${GITHUB_WORKSPACE:-$(CDPATH= cd -- "$script_dir/../.." && pwd)}
 : "${IMAGE_REPOSITORY:=${REGISTRY:-}}"
 : "${IMAGE_TAG:=${GITHUB_SHA:-$(git -C "$project_dir" rev-parse HEAD)}}"
 : "${KUBE_NAMESPACE:=one-adventure}"
+: "${ROLLOUT_TIMEOUT_SECONDS:=300}"
+: "${PVC_TIMEOUT_SECONDS:=120}"
+for limit in "$ROLLOUT_TIMEOUT_SECONDS" "$PVC_TIMEOUT_SECONDS"; do
+  [[ "$limit" =~ ^[1-9][0-9]{0,4}$ ]] || { echo 'error: deployment timeouts must be positive seconds (1-99999)' >&2; exit 2; }
+done
+command -v timeout >/dev/null || { echo 'error: GNU timeout is required' >&2; exit 127; }
+# Bound each API request as well as the complete watch command.
+kubectl() { command kubectl --request-timeout=30s "$@"; }
+diagnose_deployment() {
+  local service=$1
+  timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" get pods,pvc -o wide || true
+  timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" describe pods -l "app=$service" || true
+  timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" get events --field-selector type=Warning --sort-by=.lastTimestamp || true
+}
+wait_deployment() {
+  local service=$1
+  echo "Waiting up to ${ROLLOUT_TIMEOUT_SECONDS}s for $service"
+  if ! timeout --kill-after=5s "$((ROLLOUT_TIMEOUT_SECONDS + 10))s" kubectl --request-timeout=30s -n "$KUBE_NAMESPACE" rollout status "deployment/$service" --timeout="${ROLLOUT_TIMEOUT_SECONDS}s"; then
+    echo "error: deployment/$service failed to become ready within ${ROLLOUT_TIMEOUT_SECONDS}s" >&2
+    diagnose_deployment "$service"
+    exit 1
+  fi
+}
 # Actions-only copy; keep deploy.sh available for the original manual flow.
 selected_service=${DEPLOY_SERVICE:-all}
 selected_service=${selected_service//_/-}
@@ -155,12 +178,13 @@ if [[ "$local_storage" == true ]]; then
   KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
 fi
 for middleware in mysql redis; do
-  if ! kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$middleware" --timeout=10m; then
-    kubectl -n "$KUBE_NAMESPACE" get pvc -o wide || true
-    kubectl -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
-    echo 'Check PVC storage binding; single-node clusters without a provisioner can use --local-storage.' >&2
+  if ! timeout --kill-after=5s "$((PVC_TIMEOUT_SECONDS + 10))s" kubectl --request-timeout=30s -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound "pvc/$middleware-data" --timeout="${PVC_TIMEOUT_SECONDS}s"; then
+    echo "error: PVC $middleware-data did not bind within ${PVC_TIMEOUT_SECONDS}s" >&2
+    timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
+    diagnose_deployment "$middleware"
     exit 1
   fi
+  wait_deployment "$middleware"
 done
 fi
 # Apply only selected application resources for a partial release. Shared
@@ -200,5 +224,5 @@ fi
 # A repeated version must still roll pods to pick up the freshly pushed image.
 for service in "${services[@]}"; do
   kubectl -n "$KUBE_NAMESPACE" rollout restart "deployment/$service"
-  kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$service" --timeout=5m
+  wait_deployment "$service"
 done

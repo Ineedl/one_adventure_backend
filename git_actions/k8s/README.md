@@ -223,3 +223,14 @@ bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1
 
 也支持环境变量 IMAGE_REPOSITORY、IMAGE_TAG、KUBE_NAMESPACE。
 镜像共享仓库，以 gateway-0.0.1、user-0.0.1 等标签区分。
+
+### Actions 部署超时与静态 PV
+
+Actions 默认传入 `--local-storage`，为尚未绑定的 MySQL/Redis PVC 创建静态本地 PV，
+数据位于存储节点的 `/var/lib/one-adventure/<namespace>/mysql-data` 和 `redis-data`，回收策略为 Retain。
+已有绑定卷继续保留。默认适用于单节点；多节点需在仓库 Actions Variables 设置 `STORAGE_NODE_NAME`。
+
+每个 PVC 最多等待 120 秒绑定，每个 Deployment 最多等待 300 秒就绪，失败后输出诊断并退出。
+可在 Actions Variables 设置 `PVC_TIMEOUT_SECONDS` 和 `ROLLOUT_TIMEOUT_SECONDS`（正整数秒）。
+包含构建、推送和部署的步骤最多运行 45 分钟，整个 job 最多运行 60 分钟。
+静态卷文件保存在指定节点，节点必须允许创建上述数据目录。
