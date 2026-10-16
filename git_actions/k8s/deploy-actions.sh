@@ -94,7 +94,15 @@ if [[ "$selected_service" != all ]]; then
   # Partial releases must use the credentials already used by middleware.
   middleware_secret=$(kubectl -n "$KUBE_NAMESPACE" get secret middleware-auth -o json)
   python3 -c 'import json,sys; d=json.load(sys.stdin).get("data", {}); sys.exit(0 if d.get("mysql-root-password") and d.get("redis-password") else "error: deploy all first to initialize middleware credentials")' <<<"$middleware_secret"
+  echo "Credentials source: existing Kubernetes middleware-auth (single-service release)"
   unset MYSQL_ROOT_PASSWORD REDIS_PASSWORD
+fi
+if [[ "$selected_service" == all ]]; then
+  if [[ -n "${MYSQL_ROOT_PASSWORD:-}" ]]; then
+    echo 'MySQL credential source: supplied MYSQL_ROOT_PASSWORD (GitHub Secret in workflow)'
+  else
+    echo 'MySQL credential source: existing Kubernetes Secret, or generated on first deployment'
+  fi
 fi
 if [[ -z "${MYSQL_ROOT_PASSWORD:-}" || -z "${REDIS_PASSWORD:-}" ]]; then
   middleware_secret=$(kubectl -n "$KUBE_NAMESPACE" get secret middleware-auth --ignore-not-found -o json)
@@ -185,6 +193,19 @@ for middleware in mysql redis; do
     exit 1
   fi
   wait_deployment "$middleware"
+  if [[ "$middleware" == mysql ]]; then
+    # mysqladmin ping can succeed even after Access denied. Test the desired
+    # password against the persisted database without putting it in argv/logs.
+    if ! printf '%s\n' "$MYSQL_ROOT_PASSWORD" | timeout --kill-after=5s 30s kubectl --request-timeout=20s -n "$KUBE_NAMESPACE" exec -i deployment/mysql -- sh -ec '
+      IFS= read -r MYSQL_PWD
+      export MYSQL_PWD
+      mysql --connect-timeout=10 -h127.0.0.1 -uroot -Nse "SELECT 1" >/dev/null
+    '; then
+      echo 'error: MySQL SQL authentication failed with the configured password. Updating MYSQL_ROOT_PASSWORD does not change root passwords in existing database files. Restore the original password or reset the database account before redeploying.' >&2
+      exit 1
+    fi
+    echo 'MySQL SQL authentication with configured password: passed'
+  fi
 done
 fi
 # Apply only selected application resources for a partial release. Shared

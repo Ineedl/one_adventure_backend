@@ -255,3 +255,28 @@ kubectl get nodes -o wide
 Actions 将镜像、配置校验值、拉取凭据及本次部署标记一起写入 Pod 模板，单次 apply，
 不会在首次创建后追加 patch/restart 触发多次更新。同版本重新部署仍会更新 Pod。
 首次创建按副本数启动：gateway 为 2，其余应用为 1；后续滚动更新期间可能临时出现额外 Pod。
+
+## Envoy 查看与动态配置清理
+
+```sh
+# 查看静态 ConfigMap、就绪状态和运行时集群
+bash git_actions/k8s/query-envoy.sh
+
+# 查看 Envoy Admin API 的完整动态配置、端点、监听器或统计信息
+bash git_actions/k8s/query-envoy.sh config
+bash git_actions/k8s/query-envoy.sh endpoints
+bash git_actions/k8s/query-envoy.sh listeners
+bash git_actions/k8s/query-envoy.sh stats
+
+# 只查看部署使用的静态 envoy.yaml
+bash git_actions/k8s/query-envoy.sh configmap
+
+# 预览后重启 Envoy Pod，清除进程内动态 CDS/EDS 状态
+bash git_actions/k8s/cleanup-envoy.sh --dry-run
+bash git_actions/k8s/cleanup-envoy.sh
+```
+
+查询脚本会临时将 Admin API 转发到本机 `127.0.0.1:19901`，退出时自动清理转发进程。
+清理脚本通过 rollout restart 重建 Envoy Pod；保留 `envoy-config` ConfigMap 和 etcd 服务注册，
+xDS 会在 Envoy 重连后重新下发动态配置。两脚本默认使用 namespace `one-adventure`，
+也可设置 `KUBE_NAMESPACE` 覆盖。
