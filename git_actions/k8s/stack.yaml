@@ -105,8 +105,9 @@ metadata:
   name: gateway
   namespace: __KUBE_NAMESPACE__
 spec:
+  type: NodePort
   selector: {app: gateway}
-  ports: [{name: http, port: 8901, targetPort: 8901}]
+  ports: [{name: http, port: 8901, targetPort: 8901, nodePort: 30901}]
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -15,7 +15,7 @@ while (($#)); do
       echo 'By default preserves the namespace, PVCs and middleware-auth Secret for redeployment.'
       echo 'NAMESPACE defaults to KUBE_NAMESPACE or one-adventure. No confirmation prompt.'
       echo '--dry-run previews the exact resources without deleting them.'
-      echo '--delete-data also deletes MySQL/Redis PVCs and middleware-auth Secret; stored data may be permanently lost.'
+      echo '--delete-data also deletes MySQL/Redis PVCs, project static PVs and middleware-auth Secret; node directories remain.'
       exit 0
       ;;
     --*) echo "error: unknown option: $1" >&2; exit 2 ;;
@@ -40,14 +40,16 @@ context=$(kubectl config current-context)
 echo "Kubernetes context: $context"
 echo "Project namespace: $namespace"
 existing=$(kubectl get namespace "$namespace" --ignore-not-found -o name)
-if [[ -z "$existing" ]]; then
+if [[ -z "$existing" && "$delete_data" == false ]]; then
   echo "Namespace does not exist; nothing to clean up."
   exit 0
 fi
+if [[ -n "$existing" ]]; then
 owner=$(kubectl get namespace "$namespace" -o 'jsonpath={.metadata.labels.app\.kubernetes\.io/part-of}')
 if [[ "$owner" != one-adventure ]]; then
   echo "error: namespace must have label app.kubernetes.io/part-of=one-adventure" >&2
   exit 2
+fi
 fi
 applications=(gateway gate-server computing user item commerce ws-gateway order pay promotion xds)
 services=("${applications[@]}" etcd kafka envoy mysql redis)
@@ -60,11 +62,32 @@ for service in "${applications[@]}"; do
 done
 resources+=(secret/dockerhub-auth configmap/envoy-config configmap/kafka-config configmap/mysql-init)
 data_resources=(persistentvolumeclaim/mysql-data persistentvolumeclaim/redis-data secret/middleware-auth)
+# PVs are cluster-scoped and may survive deletion of the namespace.
+static_volumes=()
+if [[ "$delete_data" == true ]]; then
+  command -v python3 >/dev/null || { echo 'error: python3 is required for PV ownership checks' >&2; exit 127; }
+  for claim in mysql-data redis-data; do
+    pv_name="$namespace-$claim"
+    pv_json=$(kubectl --request-timeout=30s get pv "$pv_name" --ignore-not-found -o json)
+    [[ -n "$pv_json" ]] || continue
+    python3 -c '
+import json, sys
+v=json.load(sys.stdin); ns, claim=sys.argv[1:]
+spec=v.get("spec", {}); ref=spec.get("claimRef", {})
+valid=(v.get("metadata", {}).get("labels", {}).get("app.kubernetes.io/part-of")=="one-adventure"
+       and (ref.get("namespace"), ref.get("name"))==(ns, claim)
+       and spec.get("hostPath", {}).get("path")==f"/var/lib/one-adventure/{ns}/{claim}")
+if not valid: sys.exit("error: refusing to delete PV with mismatched project ownership or data path")
+' "$namespace" "$claim" <<<"$pv_json"
+    static_volumes+=("persistentvolume/$pv_name")
+  done
+fi
 if [[ "$dry_run" == true ]]; then
   printf 'Would delete: %s\n' "${resources[@]}"
   if [[ "$delete_data" == true ]]; then
     printf 'Would delete: %s\n' "${data_resources[@]}"
-    echo 'Preserving namespace only; MySQL/Redis data may be permanently lost.'
+    if ((${#static_volumes[@]})); then printf 'Would delete: %s\n' "${static_volumes[@]}"; fi
+    echo 'Node directories remain; retained MySQL data still needs its original password.'
   else
     echo 'Preserving namespace, PVCs and middleware-auth Secret.'
   fi
@@ -75,7 +98,11 @@ kubectl -n "$namespace" delete "${resources[@]}" --ignore-not-found --wait=true 
 if [[ "$delete_data" == true ]]; then
   echo 'Deleting MySQL/Redis PVCs and middleware-auth Secret. Stored data may be permanently lost.'
   kubectl -n "$namespace" delete "${data_resources[@]}" --ignore-not-found --wait=true --timeout=5m
-  echo 'Cleanup complete, including MySQL/Redis PVCs and credentials. Namespace was preserved.'
+  if ((${#static_volumes[@]})); then
+    kubectl delete "${static_volumes[@]}" --ignore-not-found --wait=true --timeout=5m
+  fi
+  echo 'Cleanup complete: PVCs, project static PVs and credentials removed. Namespace and node directories preserved.'
+  echo 'Retained MySQL files still use their original password; removing PV objects does not reset the database.'
 else
   echo 'Cleanup complete. Namespace, PVCs and middleware-auth Secret were preserved.'
 fi

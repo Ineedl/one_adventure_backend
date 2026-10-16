@@ -8,8 +8,17 @@ import subprocess
 import yaml
 
 
+def matches(actual, expected):
+    """Ignore API-server defaults while checking every field we manage."""
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(
+            key in actual and matches(actual[key], value) for key, value in expected.items()
+        )
+    return actual == expected
+
+
 def get(*args):
-    return json.loads(subprocess.check_output(["kubectl", *args, "-o", "json"], text=True))
+    return json.loads(subprocess.check_output(["kubectl", "--request-timeout=30s", *args, "-o", "json"], text=True))
 
 
 def main():
@@ -56,12 +65,38 @@ def main():
         ).strip()
         if existing:
             current = json.loads(existing)
-            # Never reassign a retained volume from a deleted claim automatically.
-            if current["spec"] != volume["spec"]:
-                raise SystemExit(f"PV {name} already exists; inspect ownership and retained data manually.")
-            print(f"{name}: matching PV already exists.")
-            continue
-        volumes.append(volume)
+            current_spec = current["spec"]
+            managed = dict(volume["spec"])
+            del managed["claimRef"]
+            # Filesystem is an API default, not a meaningful mismatch.
+            if (current.get("metadata", {}).get("labels", {}).get("app.kubernetes.io/part-of") != "one-adventure"
+                    or current_spec.get("volumeMode", "Filesystem") != "Filesystem"
+                    or not matches(current_spec, managed)):
+                raise SystemExit(f"PV {name}: storage settings or project ownership differ; refusing to change existing data storage.")
+            old_ref = current_spec.get("claimRef", {})
+            if old_ref and (old_ref.get("namespace"), old_ref.get("name")) != (namespace, claim_name):
+                raise SystemExit(f"PV {name}: belongs to another claim; refusing reassignment.")
+            if current.get("metadata", {}).get("deletionTimestamp"):
+                raise SystemExit(f"PV {name}: deletion is in progress; wait for it to finish.")
+            if old_ref.get("uid") != reference["uid"]:
+                # The PVC with this name has a new UID, so the previous PVC no
+                # longer exists. Only reuse this project's identical storage.
+                patch = [
+                    {"op": "test", "path": "/metadata/resourceVersion", "value": current["metadata"]["resourceVersion"]},
+                    {"op": "add", "path": "/spec/claimRef", "value": reference},
+                ]
+                subprocess.run(["kubectl", "patch", "pv", name, "--type=json", "-p", json.dumps(patch)], check=True)
+                print(f"{name}: rebound retained storage to new {claim_name}; disk data preserved.")
+            else:
+                print(f"{name}: matching PV already exists; API default fields ignored.")
+        else:
+            volumes.append(volume)
+        # Explicit prebinding prevents a default provisioner from competing
+        # for this claim. Do not change the immutable storage class of a PVC.
+        subprocess.run([
+            "kubectl", "-n", namespace, "patch", "pvc", claim_name,
+            "--type=merge", "-p", json.dumps({"spec": {"volumeName": name}}),
+        ], check=True)
     if volumes:
         subprocess.run(
             ["kubectl", "apply", "-f", "-"],
