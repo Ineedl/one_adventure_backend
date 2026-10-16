@@ -34,10 +34,15 @@ else
     requested=("${args[@]}")
 fi
 
-command -v gf >/dev/null 2>&1 || {
-    echo "error: gf CLI is required (install GoFrame CLI first)" >&2
-    exit 127
-}
+for service in "${requested[@]}"; do
+    if [[ "$service" != xds ]]; then
+        command -v gf >/dev/null 2>&1 || {
+            echo "error: gf CLI is required (install GoFrame CLI first)" >&2
+            exit 127
+        }
+        break
+    fi
+done
 
 for service in "${requested[@]}"; do
     valid=false
@@ -52,20 +57,24 @@ for service in "${requested[@]}"; do
 
     service_dir="$project_dir/$service"
     output="$service_dir/temp/linux_amd64/main"
+    # Some gf versions report compilation errors without a nonzero exit code.
+    # Remove old output so a failed build cannot reuse a stale executable.
+    rm -f -- "$output"
     echo "==> Building $service (linux/amd64)"
     (
         cd "$service_dir"
         if [[ "$service" == xds ]]; then
-            GOOS=linux GOARCH=amd64 go build -o temp/linux_amd64/main ./cmd/xds
+            # Alpine has no glibc loader. Produce a standalone executable.
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o temp/linux_amd64/main ./cmd/xds
         else
             gf build -a amd64 -s linux -p temp
         fi
     )
-    [[ -x "$output" ]] || chmod +x "$output"
     [[ -f "$output" ]] || {
         echo "error: build output not found: $output" >&2
         exit 1
     }
+    [[ -x "$output" ]] || chmod +x "$output"
     echo "    output: $output"
 done
 
