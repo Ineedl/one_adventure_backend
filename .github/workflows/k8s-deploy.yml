@@ -49,12 +49,16 @@ env:
 jobs:
   build-and-deploy:
     runs-on: self-hosted
-    env:
-      DOCKER_CONFIG: ${{ runner.temp }}/one-adventure-docker-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 60
     permissions:
       contents: read
     steps:
+      - name: Initialize temporary Docker config
+        run: |
+          set -euo pipefail
+          registry_config_dir=$(mktemp -d "$RUNNER_TEMP/one-adventure-docker.XXXXXX")
+          echo "DOCKER_CONFIG=$registry_config_dir" >> "$GITHUB_ENV"
+
       - name: Checkout source
         uses: actions/checkout@v4
         with:
@@ -126,4 +130,7 @@ jobs:
 
       - name: Remove temporary registry credentials
         if: always()
-        run: rm -rf -- "$DOCKER_CONFIG"
+        run: |
+          if [[ -n "${DOCKER_CONFIG:-}" ]]; then
+            rm -rf -- "$DOCKER_CONFIG"
+          fi
