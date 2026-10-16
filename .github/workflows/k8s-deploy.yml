@@ -1,8 +1,6 @@
 name: Build and Deploy to Kubernetes
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       service:
@@ -27,10 +25,6 @@ on:
         description: Version to build and deploy (e.g. 0.0.2)
         required: true
         type: string
-      xds_image_tag:
-        description: Optional xds image tag override
-        required: false
-        type: string
 
 concurrency:
   group: one-adventure-k8s
@@ -41,7 +35,6 @@ env:
   KUBE_NAMESPACE: ${{ vars.KUBE_NAMESPACE || 'one-adventure' }}
   IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
   DEPLOY_SERVICE: ${{ inputs.service || 'all' }}
-  XDS_IMAGE_TAG: ${{ inputs.xds_image_tag || '' }}
   MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD || '' }}
   REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || '' }}
 
