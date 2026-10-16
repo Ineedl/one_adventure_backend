@@ -114,13 +114,22 @@ bash git_actions/k8s/cleanup.sh
 
 # 清理自定义部署 namespace（也支持 KUBE_NAMESPACE 环境变量）
 bash git_actions/k8s/cleanup.sh my-one-adventure
+
+# 预览包含 MySQL/Redis 数据卷的清理范围
+bash git_actions/k8s/cleanup.sh --delete-data --dry-run
+
+# 同时删除 MySQL/Redis 数据卷及密码 Secret
+bash git_actions/k8s/cleanup.sh --delete-data
 ```
 
-保留 namespace、MySQL/Redis PVC 和 `middleware-auth` Secret，重新部署时复用已有
-数据和密码。etcd、Kafka 当前使用临时存储，清理 Pod 会丢失其中数据。
+默认保留 namespace、MySQL/Redis PVC 和 `middleware-auth` Secret，重新部署时复用已有
+数据和密码。指定 `--delete-data` 后，先清理服务，再删除 `mysql-data`、`redis-data` PVC
+及 `middleware-auth` Secret；下次部署会重新生成密码。PVC 的删除可能永久清除数据，
+底层 PV 按存储的 reclaimPolicy 回收，Retain 类型 PV 不会被脚本直接删除。
+namespace 始终保留。etcd、Kafka 当前使用临时存储，清理 Pod 会丢失其中数据。
 脚本仅允许清理带有 `app.kubernetes.io/part-of=one-adventure` 标签的项目 namespace，
 该标签由部署清单自动设置。namespace 或资源不存在时跳过，支持重复执行。
-清理最多等待 5 分钟；超时会报错，不会强制移除 finalizer。
+服务清理与可选的数据卷清理各最多等待 5 分钟；超时会报错，不会强制移除 finalizer。
 
 ## Runner 与完整发布
 

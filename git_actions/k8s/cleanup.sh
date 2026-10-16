@@ -3,16 +3,19 @@ set -euo pipefail
 
 namespace=${KUBE_NAMESPACE:-one-adventure}
 dry_run=false
+delete_data=false
 positional=()
 while (($#)); do
   case "$1" in
     --dry-run) dry_run=true ;;
+    --delete-data) delete_data=true ;;
     -h|--help)
-      echo "Usage: $0 [--dry-run] [NAMESPACE]"
+      echo "Usage: $0 [--dry-run] [--delete-data] [NAMESPACE]"
       echo 'Removes all project application/middleware Deployments, Services and configuration.'
-      echo 'Preserves the namespace, PVCs and middleware-auth Secret for redeployment.'
+      echo 'By default preserves the namespace, PVCs and middleware-auth Secret for redeployment.'
       echo 'NAMESPACE defaults to KUBE_NAMESPACE or one-adventure. No confirmation prompt.'
       echo '--dry-run previews the exact resources without deleting them.'
+      echo '--delete-data also deletes MySQL/Redis PVCs and middleware-auth Secret; stored data may be permanently lost.'
       exit 0
       ;;
     --*) echo "error: unknown option: $1" >&2; exit 2 ;;
@@ -56,11 +59,23 @@ for service in "${applications[@]}"; do
   resources+=("secret/$service-config")
 done
 resources+=(secret/dockerhub-auth configmap/envoy-config configmap/kafka-config configmap/mysql-init)
+data_resources=(persistentvolumeclaim/mysql-data persistentvolumeclaim/redis-data secret/middleware-auth)
 if [[ "$dry_run" == true ]]; then
   printf 'Would delete: %s\n' "${resources[@]}"
-  echo 'Preserving namespace, PVCs and middleware-auth Secret.'
+  if [[ "$delete_data" == true ]]; then
+    printf 'Would delete: %s\n' "${data_resources[@]}"
+    echo 'Preserving namespace only; MySQL/Redis data may be permanently lost.'
+  else
+    echo 'Preserving namespace, PVCs and middleware-auth Secret.'
+  fi
   exit 0
 fi
 # Deleting Deployments also garbage-collects their ReplicaSets and Pods.
 kubectl -n "$namespace" delete "${resources[@]}" --ignore-not-found --wait=true --timeout=5m
-echo 'Cleanup complete. Namespace, PVCs and middleware-auth Secret were preserved.'
+if [[ "$delete_data" == true ]]; then
+  echo 'Deleting MySQL/Redis PVCs and middleware-auth Secret. Stored data may be permanently lost.'
+  kubectl -n "$namespace" delete "${data_resources[@]}" --ignore-not-found --wait=true --timeout=5m
+  echo 'Cleanup complete, including MySQL/Redis PVCs and credentials. Namespace was preserved.'
+else
+  echo 'Cleanup complete. Namespace, PVCs and middleware-auth Secret were preserved.'
+fi
