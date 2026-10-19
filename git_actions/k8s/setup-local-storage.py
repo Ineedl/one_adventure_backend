@@ -33,7 +33,10 @@ def main():
     if not hostname:
         raise SystemExit("Selected node has no kubernetes.io/hostname label.")
     volumes = []
-    for claim_name in ("mysql-data", "redis-data"):
+    claim_names = tuple(os.environ.get("STORAGE_CLAIMS", "kafka-data,mysql-data,redis-data").split(","))
+    if not claim_names or any(name not in {"kafka-data", "mysql-data", "redis-data"} for name in claim_names):
+        raise SystemExit("STORAGE_CLAIMS must be a comma-separated list of known project data PVCs.")
+    for claim_name in claim_names:
         claim = get("-n", namespace, "get", "pvc", claim_name)
         if claim.get("status", {}).get("phase") == "Bound":
             print(f"{claim_name}: already bound; retaining existing storage.")

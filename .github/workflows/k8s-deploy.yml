@@ -126,7 +126,7 @@ jobs:
       - name: Show deployed workloads
         if: always()
         timeout-minutes: 1
-        run: kubectl --request-timeout=20s get deployments,pods,svc,pvc -n "$KUBE_NAMESPACE" -o wide
+        run: kubectl --request-timeout=20s get deployments,statefulsets,pods,svc,pvc -n "$KUBE_NAMESPACE" -o wide
 
       - name: Remove temporary registry credentials
         if: always()

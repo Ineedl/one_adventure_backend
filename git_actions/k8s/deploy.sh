@@ -34,7 +34,7 @@ while (($#)); do
       ;;
     -h|--help)
       echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] [--xds-tag TAG] IMAGE_REPOSITORY [IMAGE_TAG]"
-      echo '--local-storage creates retained node-local PVs for pending MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
+      echo '--local-storage creates retained node-local PVs for pending Kafka/MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
       echo "--deploy-only skips binary builds, image builds, and image pushes."
       echo '--docker-config FILE imports Docker auth for Kubernetes image pulls (e.g. "$HOME/.docker/config.json").'
       echo '--xds-tag TAG overrides the xds version for image pushes and deployment (also XDS_IMAGE_TAG).'
@@ -142,18 +142,28 @@ kubectl -n "$KUBE_NAMESPACE" create configmap envoy-config \
 kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --from-file=server.properties="$project_dir/one_adventure/kafka/server.properties" \
   --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 kubectl apply -f "$render_dir/middleware.yaml"
 if [[ "$local_storage" == true ]]; then
   KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
 fi
+if ! kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound pvc/kafka-data --timeout=120s; then
+  kubectl -n "$KUBE_NAMESPACE" describe pvc kafka-data || true
+  echo 'Kafka PVC did not bind; check the StorageClass or use --local-storage.' >&2
+  exit 1
+fi
 for middleware in mysql redis; do
-  if ! kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$middleware" --timeout=10m; then
+  workload_kind=deployment
+  if [[ "$middleware" == mysql ]]; then workload_kind=statefulset; fi
+  if ! kubectl -n "$KUBE_NAMESPACE" rollout status "$workload_kind/$middleware" --timeout=10m; then
     kubectl -n "$KUBE_NAMESPACE" get pvc -o wide || true
     kubectl -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
     echo 'Check PVC storage binding; single-node clusters without a provisioner can use --local-storage.' >&2
     exit 1
   fi
 done
+kubectl -n "$KUBE_NAMESPACE" delete deployment/etcd deployment/kafka statefulset/envoy service/envoy-headless \
+  --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 kubectl apply -f "$render_dir/stack.yaml"
 kubectl apply -f "$render_dir/applications.yaml"
 for service in "${services[@]}"; do
@@ -167,6 +177,10 @@ if [[ -n "$docker_config_file" ]]; then
       -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"dockerhub-auth"}]}}}}'
   done
 fi
+statefulsets=$(kubectl -n "$KUBE_NAMESPACE" get statefulsets -o name)
+for statefulset in $statefulsets; do
+  kubectl -n "$KUBE_NAMESPACE" rollout status "$statefulset" --timeout=10m
+done
 deployments=$(kubectl -n "$KUBE_NAMESPACE" get deployments -o name)
 for deployment in $deployments; do
   kubectl -n "$KUBE_NAMESPACE" rollout status "$deployment" --timeout=5m

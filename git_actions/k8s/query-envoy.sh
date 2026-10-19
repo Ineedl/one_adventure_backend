@@ -14,8 +14,8 @@ fi
 tmp_dir=$(mktemp -d)
 cleanup(){ trap - EXIT INT TERM; [[ -n "$forward_pid" ]] && kill "$forward_pid" 2>/dev/null || true; [[ -n "$forward_pid" ]] && wait "$forward_pid" 2>/dev/null || true; rm -rf "$tmp_dir"; }
 trap cleanup EXIT INT TERM
-kubectl --request-timeout=30s -n "$namespace" get deployment/envoy >/dev/null
-kubectl --request-timeout=30s -n "$namespace" port-forward --address 127.0.0.1 deployment/envoy 19901:9901 >"$tmp_dir/forward.log" 2>&1 & forward_pid=$!
+kubectl --request-timeout=30s -n "$namespace" get service/envoy >/dev/null
+kubectl --request-timeout=30s -n "$namespace" port-forward --address 127.0.0.1 service/envoy 19901:9901 >"$tmp_dir/forward.log" 2>&1 & forward_pid=$!
 ready=false
 for _ in {1..30}; do
   kill -0 "$forward_pid" 2>/dev/null || break

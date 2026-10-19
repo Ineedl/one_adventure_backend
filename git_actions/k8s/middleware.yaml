@@ -14,12 +14,33 @@ data:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  name: kafka-data
+  namespace: __KUBE_NAMESPACE__
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 10Gi}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
   name: mysql-data
   namespace: __KUBE_NAMESPACE__
 spec:
   accessModes: [ReadWriteOnce]
   resources:
     requests: {storage: 10Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-headless
+  namespace: __KUBE_NAMESPACE__
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: {app: mysql}
+  ports: [{name: mysql, port: 3306, targetPort: mysql}]
 ---
 apiVersion: v1
 kind: Service
@@ -31,13 +52,13 @@ spec:
   ports: [{name: mysql, port: 3306, targetPort: mysql}]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: mysql
   namespace: __KUBE_NAMESPACE__
 spec:
   replicas: 1
-  strategy: {type: Recreate}
+  serviceName: mysql-headless
   selector: {matchLabels: {app: mysql}}
   template:
     metadata: {labels: {app: mysql}}

@@ -20,11 +20,11 @@ diagnose_deployment() {
   timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" describe pods -l "app=$service" || true
   timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" get events --field-selector type=Warning --sort-by=.lastTimestamp || true
 }
-wait_deployment() {
-  local service=$1
-  echo "Waiting up to ${ROLLOUT_TIMEOUT_SECONDS}s for $service"
-  if ! timeout --kill-after=5s "$((ROLLOUT_TIMEOUT_SECONDS + 10))s" kubectl --request-timeout=30s -n "$KUBE_NAMESPACE" rollout status "deployment/$service" --timeout="${ROLLOUT_TIMEOUT_SECONDS}s"; then
-    echo "error: deployment/$service failed to become ready within ${ROLLOUT_TIMEOUT_SECONDS}s" >&2
+wait_workload() {
+  local kind=$1 service=$2
+  echo "Waiting up to ${ROLLOUT_TIMEOUT_SECONDS}s for $kind/$service"
+  if ! timeout --kill-after=5s "$((ROLLOUT_TIMEOUT_SECONDS + 10))s" kubectl --request-timeout=30s -n "$KUBE_NAMESPACE" rollout status "$kind/$service" --timeout="${ROLLOUT_TIMEOUT_SECONDS}s"; then
+    echo "error: $kind/$service failed to become ready within ${ROLLOUT_TIMEOUT_SECONDS}s" >&2
     diagnose_deployment "$service"
     exit 1
   fi
@@ -55,7 +55,7 @@ while (($#)); do
       ;;
     -h|--help)
       echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] IMAGE_REPOSITORY [IMAGE_TAG]"
-      echo '--local-storage creates retained node-local PVs for pending MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
+      echo '--local-storage creates retained node-local PVs for pending Kafka/MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
       echo "--deploy-only skips binary builds, image builds, and image pushes."
       echo '--docker-config FILE imports Docker auth for Kubernetes image pulls (e.g. "$HOME/.docker/config.json").'
       echo 'MySQL/Redis passwords are generated automatically and reused from the cluster; environment variables override them.'
@@ -181,22 +181,30 @@ kubectl -n "$KUBE_NAMESPACE" create configmap envoy-config \
 kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --from-file=server.properties="$project_dir/one_adventure/kafka/server.properties" \
   --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 kubectl apply -f "$render_dir/middleware.yaml"
 if [[ "$local_storage" == true ]]; then
   KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
 fi
-for middleware in mysql redis; do
+for middleware in kafka mysql redis; do
   if ! timeout --kill-after=5s "$((PVC_TIMEOUT_SECONDS + 10))s" kubectl --request-timeout=30s -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound "pvc/$middleware-data" --timeout="${PVC_TIMEOUT_SECONDS}s"; then
     echo "error: PVC $middleware-data did not bind within ${PVC_TIMEOUT_SECONDS}s" >&2
     timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
     diagnose_deployment "$middleware"
     exit 1
   fi
-  wait_deployment "$middleware"
+  if [[ "$middleware" == kafka ]]; then
+    continue
+  fi
+  if [[ "$middleware" == mysql ]]; then
+    wait_workload statefulset "$middleware"
+  else
+    wait_workload deployment "$middleware"
+  fi
   if [[ "$middleware" == mysql ]]; then
     # mysqladmin ping can succeed even after Access denied. Test the desired
     # password against the persisted database without putting it in argv/logs.
-    if ! printf '%s\n' "$MYSQL_ROOT_PASSWORD" | timeout --kill-after=5s 30s kubectl --request-timeout=20s -n "$KUBE_NAMESPACE" exec -i deployment/mysql -- sh -ec '
+    if ! printf '%s\n' "$MYSQL_ROOT_PASSWORD" | timeout --kill-after=5s 30s kubectl --request-timeout=20s -n "$KUBE_NAMESPACE" exec -i statefulset/mysql -- sh -ec '
       IFS= read -r MYSQL_PWD
       export MYSQL_PWD
       mysql --connect-timeout=10 -h127.0.0.1 -uroot -Nse "SELECT 1" >/dev/null
@@ -240,8 +248,18 @@ for name in ("stack.yaml", "applications.yaml"):
         documents.append(doc)
 (root / "selected.yaml").write_text(yaml.safe_dump_all(documents, sort_keys=False))
 FILTER
+if [[ "$selected_service" == all ]]; then
+  kubectl -n "$KUBE_NAMESPACE" delete deployment/etcd deployment/kafka statefulset/envoy service/envoy-headless \
+    --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+fi
 kubectl apply -f "$render_dir/selected.yaml"
+if [[ "$selected_service" == all ]]; then
+  for service in etcd kafka; do
+    wait_workload statefulset "$service"
+  done
+  wait_workload deployment envoy
+fi
 # The complete Pod template is applied once; only observe the rollout here.
 for service in "${services[@]}"; do
-  wait_deployment "$service"
+  wait_workload deployment "$service"
 done

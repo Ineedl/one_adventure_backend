@@ -54,7 +54,7 @@ MySQL 密码支持字母、数字、下划线、点和短横线，以兼容应�
 
 ```sh
 bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 --deploy-only
-kubectl get deployments,pods -n one-adventure
+kubectl get deployments,statefulsets,pods -n one-adventure
 ```
 
 `--deploy-only` 跳过编译、镜像构建和推送。所有对应版本镜像必须已存在。
@@ -85,11 +85,16 @@ kubectl -n one-adventure rollout status deployment/xds --timeout=5m
 也可以重新执行部署脚本并指定 `--xds-tag 0.0.1`；相同镜像标签不会自动触发更新，
 因此覆盖后仍建议执行 `rollout restart`。
 
-Deployment 会自动补齐期望副本，直接删除失败 Pod 会使其重建。
+Deployment 和 StatefulSet 会自动补齐期望副本，直接删除失败 Pod 会使其重建。
 xds 滚动更新卡住时可能同时保留新旧 Pod，应修正 Deployment 的镜像版本。
 副本数为 0 的旧 ReplicaSet 是回滚历史，不代表正在运行的 Pod。
-Kafka 使用 Recreate 更新策略，更新时先停止旧 Pod，再启动新 Pod，期间服务会中断。
-Kafka 数据目前使用 emptyDir，Pod 替换会丢失数据；需要保留数据时应先迁移至持久卷。
+Kafka、MySQL 和 etcd 使用单副本 StatefulSet，并有各自的 headless governing Service；
+Envoy 使用 Deployment，通过 xDS 获取动态配置。Kafka/MySQL 的客户端仍通过原有
+`kafka`/`mysql` Service 访问。迁移时部署脚本会删除旧 workload，再应用对应的新类型，期间服务会短暂中断。
+Kafka 使用 `kafka-data` PVC，MySQL 使用 `mysql-data` PVC，两者的数据卷会保留。
+旧版 Kafka 曾使用 `emptyDir` 的数据不会迁移；etcd 目前仍使用临时存储，首次替换旧
+etcd Deployment 会丢失其 Pod 内数据，应用需重新向 etcd 注册服务。Envoy 从旧 StatefulSet
+改回 Deployment 时会移除旧 headless Service，Envoy 动态配置会在 Pod 启动后从 xDS 重新获取。
 
 应用配置从 `<CONFIG_ROOT>/<服务源码目录>/manifest/config-docker` 生成 Secret，
 保留 config.yaml、rpc.yaml、trace.yaml 等完整文件；CONFIG_ROOT 默认仓库根目录。
@@ -122,12 +127,13 @@ bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
 此参数仅配置 Kubernetes 拉取认证；完整发布的 Docker 推送仍使用当前用户的登录状态。
 本次清单未迁移 Compose 的 Nginx 入口与可观测性组件；trace.yaml 中的 Tempo/Loki
 地址需要已有对应服务或使用环境配置关闭导出。
-etcd 与 Kafka 当前未配置持久卷；生产使用前需要添加持久化存储。
+etcd 已使用 StatefulSet 获取稳定 Pod 身份，但仍使用临时数据目录；Pod 替换会重置 etcd
+数据，生产使用前应添加持久卷。
 
-## MySQL 与 Redis
+## Kafka、MySQL 与 Redis
 
-`middleware.yaml` 部署 MySQL `mysql:8.0` 和 Redis `redis:7.4-alpine`，分别使用
-10Gi 和 1Gi 的 PVC；Redis 开启 AOF。集群需有默认 StorageClass，或预先提供匹配的 PV。
+`middleware.yaml` 为 Kafka、MySQL 和 Redis 分别创建 10Gi、10Gi、1Gi 的 PVC；
+Redis 开启 AOF。集群需有默认 StorageClass，或预先提供匹配的 PV。
 若出现 `pod has unbound immediate PersistentVolumeClaims`，表示 PVC 尚未绑定存储，
 可通过 `kubectl get storageclass`、`kubectl describe pvc mysql-data -n one-adventure` 查看原因。
 没有动态存储的单节点集群可直接重新部署并添加 `--local-storage`：
@@ -137,17 +143,30 @@ bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
   --deploy-only --xds-tag 0.0.2 --local-storage
 ```
 
-该参数为尚未绑定的 MySQL/Redis PVC 创建静态 hostPath PV，数据目录为节点上的
-`/var/lib/one-adventure/<namespace>/mysql-data` 和 `redis-data`，并设置节点亲和性。
+该参数为尚未绑定的 Kafka/MySQL/Redis PVC 创建静态 hostPath PV，数据目录为节点上的
+`/var/lib/one-adventure/<namespace>/kafka-data`、`mysql-data` 和 `redis-data`，并设置节点亲和性。
 已绑定的 PVC 保持原存储，现有 PVC 无需删除；多节点集群必须通过 STORAGE_NODE_NAME
 指定存储节点。此模式需要创建集群级 PV 的权限，节点磁盘需有足够空间，PVC 容量声明
 不会限制 hostPath 实际用量。节点故障时数据不会自动迁移。
 PV 使用 Retain 策略。普通清理保留 PVC 和 PV；`cleanup.sh --delete-data` 会删除 PVC 及经过归属校验的项目静态 PV，节点数据目录仍保留。部署脚本可在归属和存储配置一致时复用同名 PVC 的保留卷。
+Kafka Pod 的初始化容器会将数据目录属主设为运行 Kafka 的 UID 1000；它不会更改目录内已有文件的属主。
 
-两个 Deployment 都使用 Recreate，避免更新时多个实例同时写入同一个数据卷。
+Kafka 和 MySQL 各运行一个 StatefulSet 副本，使用稳定身份和 PVC；StatefulSet 默认按序更新，
+避免两个实例同时写入同一个数据卷。
 MySQL 8 首次初始化可能需要几十秒，启动探针会等待 30 秒后使用 `mysqladmin ping`
 检查服务，最多允许 10 分钟完成初始化；启动期间出现少量 `ERROR 2003` 探针事件属于正常现象。
-脚本等待两者健康检查通过后，才提交应用清单。
+脚本在创建 Kafka StatefulSet 前等待其 PVC 绑定，并等待 MySQL StatefulSet、Redis Deployment
+健康检查通过后再提交应用清单。
+
+只需重新应用 Kafka/MySQL 配置并重建这两个 Pod 时，可在仓库根目录运行：
+
+```sh
+bash git_actions/k8s/recreate-middleware.sh
+```
+
+脚本默认使用单节点静态 hostPath PV，仅应用 Kafka/MySQL 相关资源并保留 PVC；
+`--no-local-storage` 可用于已有 StorageClass 或预先创建 PV 的集群。旧 Kafka `emptyDir`
+数据不会自动迁移到新 PVC。
 
 密码存储在 `middleware-auth` Secret。MySQL 首次启动自动创建 `test`、
 `one_adventure_user`、`one_adventure_item`、`one_adventure_commerce`、
@@ -160,8 +179,8 @@ MySQL 内执行对应的 ALTER USER，再同步部署配置。Redis 密码变更
 应用配置变更由脚本触发滚动更新。删除 Deployment 会保留 PVC，删除 PVC 可能丢失数据。
 
 ```sh
-kubectl get deployments,pods,svc,pvc -n one-adventure
-kubectl logs deployment/mysql -n one-adventure
+kubectl get deployments,statefulsets,pods,svc,pvc -n one-adventure
+kubectl logs statefulset/mysql -n one-adventure
 kubectl logs deployment/redis -n one-adventure
 ```
 
@@ -186,9 +205,9 @@ bash git_actions/k8s/port-forward-middleware.sh \
 
 ## 清理部署
 
-清理全部 11 个应用及 etcd、Kafka、Envoy、MySQL、Redis 的 Deployment、Service，
-同时删除应用配置 Secret、镜像认证 Secret 和项目 ConfigMap。Deployment 下属的
-ReplicaSet 和 Pod 随之删除。执行时不询问确认。
+清理全部 11 个应用及 etcd、Kafka、Envoy、MySQL、Redis 的 Deployment/StatefulSet、Service，
+同时删除应用配置 Secret、镜像认证 Secret 和项目 ConfigMap。工作负载下属的 Pod 随之删除。
+执行时不询问确认。
 
 ```sh
 # 预览当前 kubectl context 下将删除的资源
@@ -200,18 +219,18 @@ bash git_actions/k8s/cleanup.sh
 # 清理自定义部署 namespace（也支持 KUBE_NAMESPACE 环境变量）
 bash git_actions/k8s/cleanup.sh my-one-adventure
 
-# 预览包含 MySQL/Redis 数据卷的清理范围
+# 预览包含 Kafka/MySQL/Redis 数据卷的清理范围
 bash git_actions/k8s/cleanup.sh --delete-data --dry-run
 
-# 同时删除 MySQL/Redis 数据卷及密码 Secret
+# 同时删除 Kafka/MySQL/Redis 数据卷及密码 Secret
 bash git_actions/k8s/cleanup.sh --delete-data
 ```
 
-默认保留 namespace、MySQL/Redis PVC 和 `middleware-auth` Secret，重新部署时复用已有
-数据和密码。指定 `--delete-data` 后，先清理服务，再删除 `mysql-data`、`redis-data` PVC
+默认保留 namespace、Kafka/MySQL/Redis PVC 和 `middleware-auth` Secret，重新部署时复用已有
+数据和密码。指定 `--delete-data` 后，先清理服务，再删除 `kafka-data`、`mysql-data`、`redis-data` PVC
 及 `middleware-auth` Secret；下次部署会重新生成密码。PVC 的删除可能永久清除数据，
-项目静态 PV（`<namespace>-mysql-data`、`<namespace>-redis-data`）通过归属和目录校验后也会删除；其他 PV 按 reclaimPolicy 回收。节点 hostPath 文件不会删除，旧 MySQL 数据仍需原密码，不能靠删除 PV 重置数据库。
-namespace 始终保留。etcd、Kafka 当前使用临时存储，清理 Pod 会丢失其中数据。
+项目静态 PV（`<namespace>-kafka-data`、`<namespace>-mysql-data`、`<namespace>-redis-data`）通过归属和目录校验后也会删除；其他 PV 按 reclaimPolicy 回收。节点 hostPath 文件不会删除，旧 MySQL 数据仍需原密码，不能靠删除 PV 重置数据库。
+namespace 始终保留。etcd 当前使用临时存储，清理 Pod 会丢失其中数据。
 脚本仅允许清理带有 `app.kubernetes.io/part-of=one-adventure` 标签的项目 namespace，
 该标签由部署清单自动设置。namespace 或资源不存在时跳过，支持重复执行。
 服务清理与可选的数据卷清理各最多等待 5 分钟；超时会报错，不会强制移除 finalizer。
@@ -231,8 +250,8 @@ bash git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1
 
 ### Actions 部署超时与静态 PV
 
-Actions 默认传入 `--local-storage`，为尚未绑定的 MySQL/Redis PVC 创建静态本地 PV，
-数据位于存储节点的 `/var/lib/one-adventure/<namespace>/mysql-data` 和 `redis-data`，回收策略为 Retain。
+Actions 默认传入 `--local-storage`，为尚未绑定的 Kafka/MySQL/Redis PVC 创建静态本地 PV，
+数据位于存储节点的 `/var/lib/one-adventure/<namespace>/kafka-data`、`mysql-data` 和 `redis-data`，回收策略为 Retain。
 已有绑定卷继续保留。默认适用于单节点；多节点需在仓库 Actions Variables 设置 `STORAGE_NODE_NAME`。
 
 每个 PVC 最多等待 120 秒绑定，每个 Deployment 最多等待 300 秒就绪，失败后输出诊断并退出。
@@ -277,6 +296,6 @@ bash git_actions/k8s/cleanup-envoy.sh
 ```
 
 查询脚本会临时将 Admin API 转发到本机 `127.0.0.1:19901`，退出时自动清理转发进程。
-清理脚本通过 rollout restart 重建 Envoy Pod；保留 `envoy-config` ConfigMap 和 etcd 服务注册，
+清理脚本通过 rollout restart 重建 Envoy Deployment Pod；保留 `envoy-config` ConfigMap 和 etcd 服务注册，
 xDS 会在 Envoy 重连后重新下发动态配置。两脚本默认使用 namespace `one-adventure`，
 也可设置 `KUBE_NAMESPACE` 覆盖。
