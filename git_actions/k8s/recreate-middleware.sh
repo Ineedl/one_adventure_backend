@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reapply and recreate only Kafka and MySQL. PVCs are never deleted.
+# Reapply and recreate Kafka, MySQL, and Redis. PVCs are never deleted.
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 : "${KUBE_NAMESPACE:=one-adventure}"
@@ -11,7 +11,7 @@ local_storage=true
 
 usage() {
   echo "Usage: $0 [--no-local-storage]"
-  echo "Applies only Kafka and MySQL resources, then recreates both StatefulSets."
+  echo "Applies Kafka, MySQL, and Redis resources, then recreates their StatefulSets."
   echo "PVCs and their data are preserved."
 }
 while (($#)); do
@@ -40,7 +40,11 @@ import sys
 from pathlib import Path
 import yaml
 
-selected = {"kafka-data", "mysql-data", "mysql-init", "mysql", "mysql-headless", "kafka", "kafka-headless"}
+selected = {
+    "kafka-data", "mysql-data", "redis-data", "mysql-init",
+    "mysql", "mysql-headless", "kafka", "kafka-headless",
+    "redis", "redis-headless",
+}
 docs = []
 for filename in sys.argv[1:]:
     for doc in yaml.safe_load_all(Path(filename).read_text()):
@@ -49,8 +53,8 @@ for filename in sys.argv[1:]:
 print(yaml.safe_dump_all(docs, sort_keys=False), end="")
 PY
 
-echo "Applying Kafka/MySQL resources in namespace $KUBE_NAMESPACE"
-kubectl -n "$KUBE_NAMESPACE" delete deployment/kafka deployment/mysql \
+echo "Applying Kafka/MySQL/Redis resources in namespace $KUBE_NAMESPACE"
+kubectl -n "$KUBE_NAMESPACE" delete deployment/kafka deployment/mysql deployment/redis \
   --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 kubectl apply -f "$tmp_dir/selected.yaml"
 kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
@@ -58,19 +62,20 @@ kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --dry-run=client -o yaml | kubectl apply -f -
 
 if [[ "$local_storage" == true ]]; then
-  STORAGE_CLAIMS=kafka-data,mysql-data KUBE_NAMESPACE="$KUBE_NAMESPACE" \
+  STORAGE_CLAIMS=kafka-data,mysql-data,redis-data KUBE_NAMESPACE="$KUBE_NAMESPACE" \
     python3 "$script_dir/setup-local-storage.py"
 fi
-for claim in kafka-data mysql-data; do
+for claim in kafka-data mysql-data redis-data; do
   echo "Waiting for PVC $claim"
   kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound \
     "pvc/$claim" --timeout="${PVC_TIMEOUT_SECONDS}s"
 done
 
-echo 'Recreating Kafka and MySQL Pods'
-kubectl -n "$KUBE_NAMESPACE" rollout restart statefulset/kafka statefulset/mysql
+echo 'Recreating Kafka, MySQL, and Redis Pods'
+kubectl -n "$KUBE_NAMESPACE" rollout restart statefulset/kafka statefulset/mysql statefulset/redis
 kubectl -n "$KUBE_NAMESPACE" rollout status statefulset/kafka --timeout="${ROLLOUT_TIMEOUT_SECONDS}s"
 kubectl -n "$KUBE_NAMESPACE" rollout status statefulset/mysql --timeout="${ROLLOUT_TIMEOUT_SECONDS}s"
-kubectl -n "$KUBE_NAMESPACE" get statefulset/kafka statefulset/mysql pvc/kafka-data pvc/mysql-data -o wide
-kubectl -n "$KUBE_NAMESPACE" get pods -l 'app in (kafka,mysql)' -o wide
-echo 'Kafka and MySQL recreation completed.'
+kubectl -n "$KUBE_NAMESPACE" rollout status statefulset/redis --timeout="${ROLLOUT_TIMEOUT_SECONDS}s"
+kubectl -n "$KUBE_NAMESPACE" get statefulset/kafka statefulset/mysql statefulset/redis pvc/kafka-data pvc/mysql-data pvc/redis-data -o wide
+kubectl -n "$KUBE_NAMESPACE" get pods -l 'app in (kafka,mysql,redis)' -o wide
+echo 'Kafka, MySQL, and Redis recreation completed.'

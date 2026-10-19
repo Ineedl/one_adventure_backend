@@ -110,6 +110,17 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: redis-headless
+  namespace: __KUBE_NAMESPACE__
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: {app: redis}
+  ports: [{name: redis, port: 6379, targetPort: redis}]
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: redis
   namespace: __KUBE_NAMESPACE__
 spec:
@@ -117,13 +128,13 @@ spec:
   ports: [{name: redis, port: 6379, targetPort: redis}]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   namespace: __KUBE_NAMESPACE__
 spec:
   replicas: 1
-  strategy: {type: Recreate}
+  serviceName: redis-headless
   selector: {matchLabels: {app: redis}}
   template:
     metadata: {labels: {app: redis}}

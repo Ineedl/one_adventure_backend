@@ -57,7 +57,8 @@ resources=()
 for service in "${services[@]}"; do
   resources+=("deployment/$service" "statefulset/$service" "service/$service")
 done
-resources+=(service/etcd-headless service/kafka-headless service/envoy-headless service/mysql-headless)
+resources+=(service/etcd-headless service/kafka-headless service/envoy-headless
+  service/mysql-headless service/redis-headless)
 for service in "${applications[@]}"; do
   resources+=("secret/$service-config")
 done

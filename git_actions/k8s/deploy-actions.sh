@@ -181,7 +181,8 @@ kubectl -n "$KUBE_NAMESPACE" create configmap envoy-config \
 kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --from-file=server.properties="$project_dir/one_adventure/kafka/server.properties" \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql deployment/redis \
+  --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 kubectl apply -f "$render_dir/middleware.yaml"
 if [[ "$local_storage" == true ]]; then
   KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
@@ -196,7 +197,7 @@ for middleware in kafka mysql redis; do
   if [[ "$middleware" == kafka ]]; then
     continue
   fi
-  if [[ "$middleware" == mysql ]]; then
+  if [[ "$middleware" == mysql || "$middleware" == redis ]]; then
     wait_workload statefulset "$middleware"
   else
     wait_workload deployment "$middleware"

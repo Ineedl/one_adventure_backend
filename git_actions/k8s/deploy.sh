@@ -142,7 +142,8 @@ kubectl -n "$KUBE_NAMESPACE" create configmap envoy-config \
 kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --from-file=server.properties="$project_dir/one_adventure/kafka/server.properties" \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql deployment/redis \
+  --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 kubectl apply -f "$render_dir/middleware.yaml"
 if [[ "$local_storage" == true ]]; then
   KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
@@ -153,9 +154,7 @@ if ! kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound pv
   exit 1
 fi
 for middleware in mysql redis; do
-  workload_kind=deployment
-  if [[ "$middleware" == mysql ]]; then workload_kind=statefulset; fi
-  if ! kubectl -n "$KUBE_NAMESPACE" rollout status "$workload_kind/$middleware" --timeout=10m; then
+  if ! kubectl -n "$KUBE_NAMESPACE" rollout status "statefulset/$middleware" --timeout=10m; then
     kubectl -n "$KUBE_NAMESPACE" get pvc -o wide || true
     kubectl -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
     echo 'Check PVC storage binding; single-node clusters without a provisioner can use --local-storage.' >&2
