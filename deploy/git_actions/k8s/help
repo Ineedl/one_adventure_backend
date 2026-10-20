@@ -1,0 +1,6 @@
+
+bash deploy/git_actions/k8s/deploy.sh \
+  15342537816/one_adventure_backend 0.0.1 \
+  --deploy-only \
+  --docker-config "$HOME/.docker/config.json" \
+  --local-storage
