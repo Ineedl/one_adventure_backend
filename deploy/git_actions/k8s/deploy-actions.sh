@@ -219,8 +219,10 @@ done
 fi
 # Apply only selected application resources for a partial release. Shared
 # middleware and other applications keep their existing versions and config.
+KAFKA_CONFIG_FILE="$project_dir/one_adventure/kafka/server.properties" \
 DOCKER_CONFIG_FILE="$docker_config_file" python3 - "$render_dir" "${services[@]}" <<'FILTER'
 from pathlib import Path
+import hashlib
 import os
 import sys
 import uuid
@@ -229,6 +231,7 @@ root = Path(sys.argv[1])
 selected = set(sys.argv[2:])
 # One token per invocation also refreshes images when a tag is reused.
 release_id = uuid.uuid4().hex
+kafka_config_checksum = hashlib.sha256(Path(os.environ["KAFKA_CONFIG_FILE"]).read_bytes()).hexdigest()
 documents = []
 for name in ("stack.yaml", "applications.yaml"):
     for doc in yaml.safe_load_all((root / name).read_text()):
@@ -246,6 +249,9 @@ for name in ("stack.yaml", "applications.yaml"):
                 doc["spec"]["template"]["spec"]["imagePullSecrets"] = [{"name": "dockerhub-auth"}]
             for container in doc["spec"]["template"]["spec"]["containers"]:
                 container["imagePullPolicy"] = "Always"
+        if doc.get("kind") == "StatefulSet" and doc["metadata"]["name"] == "kafka":
+            annotations = doc["spec"]["template"].setdefault("metadata", {}).setdefault("annotations", {})
+            annotations["checksum/config"] = kafka_config_checksum
         documents.append(doc)
 (root / "selected.yaml").write_text(yaml.safe_dump_all(documents, sort_keys=False))
 FILTER
