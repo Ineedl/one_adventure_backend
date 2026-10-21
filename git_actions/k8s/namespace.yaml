@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: __KUBE_NAMESPACE__
-  labels:
-    app.kubernetes.io/part-of: one-adventure
