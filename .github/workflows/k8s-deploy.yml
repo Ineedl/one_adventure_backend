@@ -119,7 +119,7 @@ jobs:
             args+=(--deploy-only)
             echo "Deploy existing images: $DEPLOY_SERVICE / $IMAGE_TAG"
           fi
-          bash "$GITHUB_WORKSPACE/git_actions/k8s/deploy-runner.sh" \
+          bash "$GITHUB_WORKSPACE/deploy/git_actions/k8s/deploy-runner.sh" \
             "${args[@]}" \
             "$IMAGE_REPOSITORY" "$IMAGE_TAG"
 
