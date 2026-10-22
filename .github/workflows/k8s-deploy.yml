@@ -30,8 +30,8 @@ on:
         required: true
         default: false
         type: boolean
-      deploy_observability:
-        description: Apply and wait for Loki, Tempo and Grafana during a full deployment (unchecked leaves existing resources untouched)
+      deploy_monitoring_tools:
+        description: Deploy monitoring tools during a full deployment (unchecked leaves existing resources untouched)
         required: true
         default: true
         type: boolean
@@ -117,12 +117,12 @@ jobs:
         timeout-minutes: 45
         env:
           DEPLOY_ONLY: ${{ inputs.deploy_only }}
-          DEPLOY_OBSERVABILITY: ${{ inputs.deploy_observability }}
+          DEPLOY_MONITORING_TOOLS: ${{ inputs.deploy_monitoring_tools }}
         run: |
           set -euo pipefail
           args=(--local-storage --docker-config "$DOCKER_CONFIG/config.json")
-          if [[ "$DEPLOY_OBSERVABILITY" != true ]]; then
-            args+=(--skip-observability)
+          if [[ "$DEPLOY_MONITORING_TOOLS" != true ]]; then
+            args+=(--skip-monitoring-tools)
           fi
           if [[ "$DEPLOY_ONLY" == true ]]; then
             args+=(--deploy-only)
