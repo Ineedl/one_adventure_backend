@@ -302,6 +302,8 @@ xDS 会在 Envoy 重连后重新下发动态配置。两脚本默认使用 names
 
 选择 Actions 的 service=all 时部署这些组件；deploy_only 也会应用这些清单。
 单服务发布不会修改共享的可观测性组件。
+Actions 的 `deploy_observability` 布尔输入默认开启；关闭后，全量发布会跳过三者的
+清单应用、本地 PV 创建和就绪等待，集群中已有的 Loki、Tempo、Grafana 资源保持不变。
 
 - Loki：grafana/loki:3.5.0，单副本 StatefulSet，10Gi PVC，使用本地 TSDB/文件存储。
 - Tempo：grafana/tempo:2.7.2，单副本 StatefulSet，10Gi PVC，blocks 和 WAL 均保存在持久卷，保留 trace 48 小时。

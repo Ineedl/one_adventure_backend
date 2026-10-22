@@ -38,6 +38,7 @@ case "$selected_service" in
 esac
 deploy_only=false
 local_storage=false
+deploy_observability=true
 docker_config_file=${DOCKER_CONFIG_FILE:-}
 positional=()
 while (($#)); do
@@ -45,6 +46,7 @@ while (($#)); do
   case "$arg" in
     --deploy-only) deploy_only=true ;;
     --local-storage) local_storage=true ;;
+    --skip-observability) deploy_observability=false ;;
     --docker-config)
       if (($# < 2)) || [[ -z "$2" || "$2" == --* ]]; then
         echo "error: --docker-config requires a file path" >&2
@@ -54,8 +56,9 @@ while (($#)); do
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] IMAGE_REPOSITORY [IMAGE_TAG]"
+      echo "Usage: $0 [--deploy-only] [--local-storage] [--skip-observability] [--docker-config FILE] IMAGE_REPOSITORY [IMAGE_TAG]"
       echo '--local-storage creates retained node-local PVs for pending middleware PVCs (single node, or STORAGE_NODE_NAME).'
+      echo '--skip-observability leaves Loki, Tempo and Grafana resources untouched during a full deployment.'
       echo "--deploy-only skips binary builds, image builds, and image pushes."
       echo '--docker-config FILE imports Docker auth for Kubernetes image pulls (e.g. "$HOME/.docker/config.json").'
       echo 'MySQL/Redis passwords are generated automatically and reused from the cluster; environment variables override them.'
@@ -181,11 +184,37 @@ kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
 kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql deployment/redis \
   --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 python3 "$script_dir/render-middleware.py" "$render_dir/middleware.yaml"
+if [[ "$deploy_observability" == false ]]; then
+  python3 - "$render_dir/middleware.yaml" <<'FILTER'
+from pathlib import Path
+import sys
+import yaml
+
+path = Path(sys.argv[1])
+observability = {"loki", "loki-data", "loki-config", "loki-headless",
+                 "tempo", "tempo-data", "tempo-config", "tempo-headless",
+                 "grafana", "grafana-data", "grafana-datasources"}
+documents = yaml.safe_load_all(path.read_text())
+path.write_text(yaml.safe_dump_all(
+    (doc for doc in documents if not doc or doc.get("metadata", {}).get("name") not in observability),
+    sort_keys=False,
+))
+FILTER
+  echo 'Skipping Loki, Tempo and Grafana resources; existing resources are unchanged.'
+fi
 kubectl apply -f "$render_dir/middleware.yaml"
 if [[ "$local_storage" == true ]]; then
-  KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
+  storage_claims=kafka-data,mysql-data,redis-data
+  if [[ "$deploy_observability" == true ]]; then
+    storage_claims+=,loki-data,tempo-data,grafana-data
+  fi
+  KUBE_NAMESPACE="$KUBE_NAMESPACE" STORAGE_CLAIMS="$storage_claims" python3 "$script_dir/setup-local-storage.py"
 fi
-for middleware in kafka mysql redis loki tempo grafana; do
+middleware_services=(kafka mysql redis)
+if [[ "$deploy_observability" == true ]]; then
+  middleware_services+=(loki tempo grafana)
+fi
+for middleware in "${middleware_services[@]}"; do
   if ! timeout --kill-after=5s "$((PVC_TIMEOUT_SECONDS + 10))s" kubectl --request-timeout=30s -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound "pvc/$middleware-data" --timeout="${PVC_TIMEOUT_SECONDS}s"; then
     echo "error: PVC $middleware-data did not bind within ${PVC_TIMEOUT_SECONDS}s" >&2
     timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
