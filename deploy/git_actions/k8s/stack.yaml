@@ -171,9 +171,6 @@ spec:
   template:
     metadata: {labels: {app: gateway}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: gateway
           image: __IMAGE_REPOSITORY__:gateway-__IMAGE_TAG__

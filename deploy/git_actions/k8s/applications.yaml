@@ -19,9 +19,6 @@ spec:
   template:
     metadata: {labels: {app: gate-server}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: gate-server
           image: __IMAGE_REPOSITORY__:gate-server-__IMAGE_TAG__
@@ -56,9 +53,6 @@ spec:
   template:
     metadata: {labels: {app: computing}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: computing
           image: __IMAGE_REPOSITORY__:computing-__IMAGE_TAG__
@@ -94,9 +88,6 @@ spec:
   template:
     metadata: {labels: {app: user}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: user
           image: __IMAGE_REPOSITORY__:user-__IMAGE_TAG__
@@ -132,9 +123,6 @@ spec:
   template:
     metadata: {labels: {app: item}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: item
           image: __IMAGE_REPOSITORY__:item-__IMAGE_TAG__
@@ -169,9 +157,6 @@ spec:
   template:
     metadata: {labels: {app: commerce}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: commerce
           image: __IMAGE_REPOSITORY__:commerce-__IMAGE_TAG__
@@ -206,9 +191,6 @@ spec:
   template:
     metadata: {labels: {app: ws-gateway}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: ws-gateway
           image: __IMAGE_REPOSITORY__:ws-gateway-__IMAGE_TAG__
@@ -244,9 +226,6 @@ spec:
   template:
     metadata: {labels: {app: order}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: order
           image: __IMAGE_REPOSITORY__:order-__IMAGE_TAG__
@@ -282,9 +261,6 @@ spec:
   template:
     metadata: {labels: {app: pay}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: pay
           image: __IMAGE_REPOSITORY__:pay-__IMAGE_TAG__
@@ -320,9 +296,6 @@ spec:
   template:
     metadata: {labels: {app: promotion}}
     spec:
-      hostAliases:
-        - ip: "__HOST_GATEWAY_IP__"
-          hostnames: [host.docker.internal]
       containers:
         - name: promotion
           image: __IMAGE_REPOSITORY__:promotion-__IMAGE_TAG__

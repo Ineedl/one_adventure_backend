@@ -127,10 +127,7 @@ export MYSQL_ROOT_PASSWORD REDIS_PASSWORD
 services=(gateway gate-server computing user item commerce ws-gateway order pay promotion xds)
 if [[ "$selected_service" != all ]]; then services=("$selected_service"); fi
 echo "Deploying services: ${services[*]} (version: $IMAGE_TAG)"
-# Remaining host.docker.internal references (such as tracing) use the node IP.
-: "${HOST_GATEWAY_IP:=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')}"
 : "${CONFIG_ROOT:=$project_dir}"
-[[ -n "$HOST_GATEWAY_IP" ]] || { echo "error: HOST_GATEWAY_IP is required" >&2; exit 2; }
 for service in "${services[@]}"; do
   config_dir="$CONFIG_ROOT/${service//-/_}/manifest/config-docker"
   [[ -d "$config_dir" ]] || { echo "error: missing configuration directory: $config_dir" >&2; exit 2; }
@@ -154,7 +151,7 @@ trap 'rm -rf "$render_dir"' EXIT
 python3 "$script_dir/render-config.py" "$CONFIG_ROOT" "$render_dir" "${services[@]}"
 cp "$script_dir"/*.yaml "$render_dir"/
 for file in "$render_dir"/*.yaml; do
-  sed -i "s|__IMAGE_REPOSITORY__|$IMAGE_REPOSITORY|g; s|__IMAGE_TAG__|$IMAGE_TAG|g; s|__XDS_IMAGE_TAG__|$IMAGE_TAG|g; s|__KUBE_NAMESPACE__|$KUBE_NAMESPACE|g; s|__HOST_GATEWAY_IP__|$HOST_GATEWAY_IP|g" "$file"
+  sed -i "s|__IMAGE_REPOSITORY__|$IMAGE_REPOSITORY|g; s|__IMAGE_TAG__|$IMAGE_TAG|g; s|__XDS_IMAGE_TAG__|$IMAGE_TAG|g; s|__KUBE_NAMESPACE__|$KUBE_NAMESPACE|g" "$file"
 done
 if [[ "$selected_service" == all ]]; then
 kubectl apply -f "$render_dir/namespace.yaml"

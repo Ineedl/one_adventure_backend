@@ -44,6 +44,14 @@ def main():
             redis["address"] = "redis:6379"
             redis["pass"] = redis_password
         config_path.write_text(yaml.safe_dump(config, allow_unicode=True, sort_keys=False))
+        # Kubernetes workloads must use cluster Services or explicit external
+        # endpoints. Do not leave the Docker-only host alias in a Secret that
+        # is mounted into a Pod.
+        for filename in destination.rglob("*"):
+            if filename.is_file() and "host.docker.internal" in filename.read_text():
+                raise ValueError(
+                    f"Docker host alias remains in Kubernetes config: {filename}"
+                )
         digest = hashlib.sha256()
         for filename in sorted(destination.rglob("*")):
             if filename.is_file():

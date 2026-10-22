@@ -105,14 +105,11 @@ Redis 从旧 Deployment 迁移时会保留 `redis-data` PVC。
 Secret 用于避免额外将数据库密码复制到部署清单，但不代表集群已启用静态加密。
 脚本为应用 Pod 模板写入配置校验值，配置修改后再次部署会自动滚动更新对应应用。
 
-MySQL、Redis 使用 namespace 内的 ClusterIP Service，不开放节点端口。
-其他配置里的 host.docker.internal（如 trace 导出地址）默认解析到集群第一个节点的
-InternalIP，其他主机地址可通过 HOST_GATEWAY_IP 指定。
-
-```sh
-HOST_GATEWAY_IP=192.168.1.39 bash deploy/git_actions/k8s/deploy.sh \
-  15342537816/one_adventure_backend 0.0.1 --deploy-only
-```
+MySQL、Redis 使用 namespace 内的 ClusterIP Service，不开放节点端口。Kubernetes
+发布不会再注入 Docker 专用的 host.docker.internal 主机别名，也不会把 Pod 固定到
+某个节点。配置中的集群内依赖必须使用 Kubernetes Service 名称；集群外依赖必须使用
+稳定的 DNS、VIP 或其他可路由地址。渲染配置时如果仍发现 host.docker.internal，部署会
+直接失败，避免首次部署后服务使用错误地址。
 
 私有镜像可通过 `--docker-config` 导入当前用户的 Docker 登录凭据：
 
