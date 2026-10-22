@@ -30,6 +30,11 @@ on:
         required: true
         default: false
         type: boolean
+      deploy_observability:
+        description: Apply and wait for Loki, Tempo and Grafana during a full deployment (unchecked leaves existing resources untouched)
+        required: true
+        default: true
+        type: boolean
 
 concurrency:
   group: one-adventure-k8s
@@ -112,9 +117,13 @@ jobs:
         timeout-minutes: 45
         env:
           DEPLOY_ONLY: ${{ inputs.deploy_only }}
+          DEPLOY_OBSERVABILITY: ${{ inputs.deploy_observability }}
         run: |
           set -euo pipefail
           args=(--local-storage --docker-config "$DOCKER_CONFIG/config.json")
+          if [[ "$DEPLOY_OBSERVABILITY" != true ]]; then
+            args+=(--skip-observability)
+          fi
           if [[ "$DEPLOY_ONLY" == true ]]; then
             args+=(--deploy-only)
             echo "Deploy existing images: $DEPLOY_SERVICE / $IMAGE_TAG"
