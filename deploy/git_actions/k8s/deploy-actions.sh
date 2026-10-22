@@ -55,7 +55,7 @@ while (($#)); do
       ;;
     -h|--help)
       echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] IMAGE_REPOSITORY [IMAGE_TAG]"
-      echo '--local-storage creates retained node-local PVs for pending Kafka/MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
+      echo '--local-storage creates retained node-local PVs for pending middleware PVCs (single node, or STORAGE_NODE_NAME).'
       echo "--deploy-only skips binary builds, image builds, and image pushes."
       echo '--docker-config FILE imports Docker auth for Kubernetes image pulls (e.g. "$HOME/.docker/config.json").'
       echo 'MySQL/Redis passwords are generated automatically and reused from the cluster; environment variables override them.'
@@ -180,11 +180,12 @@ kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql deployment/redis \
   --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+python3 "$script_dir/render-middleware.py" "$render_dir/middleware.yaml"
 kubectl apply -f "$render_dir/middleware.yaml"
 if [[ "$local_storage" == true ]]; then
   KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
 fi
-for middleware in kafka mysql redis; do
+for middleware in kafka mysql redis loki tempo grafana; do
   if ! timeout --kill-after=5s "$((PVC_TIMEOUT_SECONDS + 10))s" kubectl --request-timeout=30s -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound "pvc/$middleware-data" --timeout="${PVC_TIMEOUT_SECONDS}s"; then
     echo "error: PVC $middleware-data did not bind within ${PVC_TIMEOUT_SECONDS}s" >&2
     timeout 20s kubectl --request-timeout=10s -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
@@ -194,7 +195,7 @@ for middleware in kafka mysql redis; do
   if [[ "$middleware" == kafka ]]; then
     continue
   fi
-  if [[ "$middleware" == mysql || "$middleware" == redis ]]; then
+  if [[ "$middleware" == mysql || "$middleware" == redis || "$middleware" == loki || "$middleware" == tempo ]]; then
     wait_workload statefulset "$middleware"
   else
     wait_workload deployment "$middleware"

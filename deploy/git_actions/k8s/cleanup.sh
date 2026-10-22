@@ -15,7 +15,7 @@ while (($#)); do
       echo 'By default preserves the namespace, PVCs and middleware-auth Secret for redeployment.'
       echo 'NAMESPACE defaults to KUBE_NAMESPACE or one-adventure. No confirmation prompt.'
       echo '--dry-run previews the exact resources without deleting them.'
-      echo '--delete-data also deletes Kafka/MySQL/Redis PVCs, project static PVs and middleware-auth Secret; node directories remain.'
+      echo '--delete-data also deletes Kafka/MySQL/Redis/Loki/Tempo/Grafana PVCs, project static PVs and middleware-auth Secret; node directories remain.'
       exit 0
       ;;
     --*) echo "error: unknown option: $1" >&2; exit 2 ;;
@@ -52,23 +52,23 @@ if [[ "$owner" != one-adventure ]]; then
 fi
 fi
 applications=(gateway gate-server computing user item commerce ws-gateway order pay promotion xds)
-services=("${applications[@]}" etcd kafka envoy mysql redis)
+services=("${applications[@]}" etcd kafka envoy mysql redis loki tempo grafana)
 resources=()
 for service in "${services[@]}"; do
   resources+=("deployment/$service" "statefulset/$service" "service/$service")
 done
 resources+=(service/etcd-headless service/kafka-headless service/envoy-headless
-  service/mysql-headless service/redis-headless)
+  service/mysql-headless service/redis-headless service/loki-headless service/tempo-headless)
 for service in "${applications[@]}"; do
   resources+=("secret/$service-config")
 done
-resources+=(secret/dockerhub-auth configmap/envoy-config configmap/kafka-config configmap/mysql-init)
-data_resources=(persistentvolumeclaim/kafka-data persistentvolumeclaim/mysql-data persistentvolumeclaim/redis-data secret/middleware-auth)
+resources+=(secret/dockerhub-auth configmap/envoy-config configmap/kafka-config configmap/mysql-init configmap/loki-config configmap/tempo-config configmap/grafana-datasources)
+data_resources=(persistentvolumeclaim/kafka-data persistentvolumeclaim/mysql-data persistentvolumeclaim/redis-data persistentvolumeclaim/loki-data persistentvolumeclaim/tempo-data persistentvolumeclaim/grafana-data secret/middleware-auth)
 # PVs are cluster-scoped and may survive deletion of the namespace.
 static_volumes=()
 if [[ "$delete_data" == true ]]; then
   command -v python3 >/dev/null || { echo 'error: python3 is required for PV ownership checks' >&2; exit 127; }
-  for claim in kafka-data mysql-data redis-data; do
+  for claim in kafka-data mysql-data redis-data loki-data tempo-data grafana-data; do
     pv_name="$namespace-$claim"
     pv_json=$(kubectl --request-timeout=30s get pv "$pv_name" --ignore-not-found -o json)
     [[ -n "$pv_json" ]] || continue
@@ -98,7 +98,7 @@ fi
 # Delete both workload kinds so cleanup also handles clusters mid-migration.
 kubectl -n "$namespace" delete "${resources[@]}" --ignore-not-found --wait=true --timeout=5m
 if [[ "$delete_data" == true ]]; then
-  echo 'Deleting Kafka/MySQL/Redis PVCs and middleware-auth Secret. Stored data may be permanently lost.'
+  echo 'Deleting Kafka/MySQL/Redis/Loki/Tempo/Grafana PVCs and middleware-auth Secret. Stored data may be permanently lost.'
   kubectl -n "$namespace" delete "${data_resources[@]}" --ignore-not-found --wait=true --timeout=5m
   if ((${#static_volumes[@]})); then
     kubectl delete "${static_volumes[@]}" --ignore-not-found --wait=true --timeout=5m

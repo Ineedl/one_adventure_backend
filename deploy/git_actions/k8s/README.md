@@ -38,7 +38,7 @@ runner 必须已配置 Docker、kubectl、Go、Python 3/PyYAML，并且 kubeconf
 
 部署脚本发布全部 11 个应用镜像对应的服务：gateway、gate-server、computing、
 user、item、commerce、ws-gateway、order、pay、promotion、xds，以及 etcd、Kafka、Envoy、
-MySQL 8.0 和 Redis 7.4。gateway 默认两个副本，其余各一个，稳定后预期有 17 个 Pod。
+MySQL 8.0、Redis 7.4、Loki、Tempo 和 Grafana。gateway 默认两个副本，其余各一个，稳定后预期有 20 个 Pod。
 
 无需手动输入密码。首次部署会为 MySQL 和 Redis 分别自动生成随机默认密码，保存到
 集群的 `middleware-auth` Secret；后续部署自动复用已有密码。执行账号需有读取该 Secret
@@ -123,8 +123,8 @@ bash deploy/git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
 已有 Deployment 首次添加引用时会自动滚动更新 Pod，保留其他镜像拉取 Secret。
 文件必须包含实际 `auths` 凭据；仅有 `credsStore`/`credHelpers` 的文件不能直接用于集群拉取。
 此参数仅配置 Kubernetes 拉取认证；完整发布的 Docker 推送仍使用当前用户的登录状态。
-本次清单未迁移 Compose 的 Nginx 入口与可观测性组件；trace.yaml 中的 Tempo/Loki
-地址需要已有对应服务或使用环境配置关闭导出。
+全量部署会创建 Loki、Tempo 和 Grafana；Compose 的 Nginx 入口和 Prometheus 尚未迁移。
+trace.yaml 中的 tempo:4317、loki:3100 由同 namespace 的 Service 提供。
 etcd 已使用 StatefulSet 获取稳定 Pod 身份，但仍使用临时数据目录；Pod 替换会重置 etcd
 数据，生产使用前应添加持久卷。
 
@@ -141,8 +141,8 @@ bash deploy/git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1 \
   --deploy-only --xds-tag 0.0.2 --local-storage
 ```
 
-该参数为尚未绑定的 Kafka/MySQL/Redis PVC 创建静态 hostPath PV，数据目录为节点上的
-`/var/lib/one-adventure/<namespace>/kafka-data`、`mysql-data` 和 `redis-data`，并设置节点亲和性。
+该参数为尚未绑定的 Kafka/MySQL/Redis/Loki/Tempo/Grafana PVC 创建静态 hostPath PV，数据目录为节点上的
+`/var/lib/one-adventure/<namespace>/<组件名>-data`，并设置节点亲和性。
 已绑定的 PVC 保持原存储，现有 PVC 无需删除；多节点集群必须通过 STORAGE_NODE_NAME
 指定存储节点。此模式需要创建集群级 PV 的权限，节点磁盘需有足够空间，PVC 容量声明
 不会限制 hostPath 实际用量。节点故障时数据不会自动迁移。
@@ -248,8 +248,8 @@ bash deploy/git_actions/k8s/deploy.sh 15342537816/one_adventure_backend 0.0.1
 
 ### Actions 部署超时与静态 PV
 
-Actions 默认传入 `--local-storage`，为尚未绑定的 Kafka/MySQL/Redis PVC 创建静态本地 PV，
-数据位于存储节点的 `/var/lib/one-adventure/<namespace>/kafka-data`、`mysql-data` 和 `redis-data`，回收策略为 Retain。
+Actions 默认传入 `--local-storage`，为尚未绑定的 Kafka/MySQL/Redis/Loki/Tempo/Grafana PVC 创建静态本地 PV，
+数据位于存储节点的 `/var/lib/one-adventure/<namespace>/<组件名>-data`，回收策略为 Retain。
 已有绑定卷继续保留。默认适用于单节点；多节点需在仓库 Actions Variables 设置 `STORAGE_NODE_NAME`。
 
 每个 PVC 最多等待 120 秒绑定，每个 Deployment 最多等待 300 秒就绪，失败后输出诊断并退出。
@@ -297,3 +297,29 @@ bash deploy/git_actions/k8s/cleanup-envoy.sh
 清理脚本通过 rollout restart 重建 Envoy Deployment Pod；保留 `envoy-config` ConfigMap 和 etcd 服务注册，
 xDS 会在 Envoy 重连后重新下发动态配置。两脚本默认使用 namespace `one-adventure`，
 也可设置 `KUBE_NAMESPACE` 覆盖。
+
+## Loki、Tempo 与 Grafana
+
+选择 Actions 的 service=all 时部署这些组件；deploy_only 也会应用这些清单。
+单服务发布不会修改共享的可观测性组件。
+
+- Loki：grafana/loki:3.5.0，单副本 StatefulSet，10Gi PVC，使用本地 TSDB/文件存储。
+- Tempo：grafana/tempo:2.7.2，单副本 StatefulSet，10Gi PVC，blocks 和 WAL 均保存在持久卷，保留 trace 48 小时。
+- Grafana：grafana/grafana:11.5.2，单副本 Deployment，5Gi PVC 保存账号、面板和设置。
+  使用 Recreate 更新策略，避免两个 Pod 同时写入单个数据卷。
+- PVC 支持默认 StorageClass；Actions 的 --local-storage 会为未绑定卷创建 Retain 本地 PV。
+  多节点使用本地卷时必须设置 STORAGE_NODE_NAME，卷数据不会自动跨节点迁移。
+- 首次启动前会准备数据目录权限；部署等待 PVC 绑定以及三个工作负载就绪。
+  ConfigMap 变更会通过配置 checksum 触发对应 Pod 更新。
+- 普通 cleanup 保留数据卷，--delete-data 才删除这三个组件的 PVC 和项目静态 PV。
+
+Grafana 自动配置 Loki（http://loki:3100）和 Tempo（http://tempo:3200）数据源。
+浏览器访问 http://<节点IP>:30300，首次登录为 admin/admin，登录后按提示修改密码。
+也可通过以下命令只在本机访问：
+
+```sh
+kubectl -n one-adventure port-forward service/grafana 3000:3000
+```
+
+Loki/Tempo 通过 ClusterIP 提供服务，没有开放节点端口。
+这些单副本和本地存储配置提供持久化，不提供跨节点高可用；Grafana 暂未配置 Prometheus 数据源。

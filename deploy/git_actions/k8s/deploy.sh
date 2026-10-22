@@ -34,7 +34,7 @@ while (($#)); do
       ;;
     -h|--help)
       echo "Usage: $0 [--deploy-only] [--local-storage] [--docker-config FILE] [--xds-tag TAG] IMAGE_REPOSITORY [IMAGE_TAG]"
-      echo '--local-storage creates retained node-local PVs for pending Kafka/MySQL/Redis PVCs (single node, or STORAGE_NODE_NAME).'
+      echo '--local-storage creates retained node-local PVs for pending middleware PVCs (single node, or STORAGE_NODE_NAME).'
       echo "--deploy-only skips binary builds, image builds, and image pushes."
       echo '--docker-config FILE imports Docker auth for Kubernetes image pulls (e.g. "$HOME/.docker/config.json").'
       echo '--xds-tag TAG overrides the xds version for image pushes and deployment (also XDS_IMAGE_TAG).'
@@ -141,6 +141,7 @@ kubectl -n "$KUBE_NAMESPACE" create configmap kafka-config \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$KUBE_NAMESPACE" delete deployment/mysql deployment/redis \
   --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+python3 "$script_dir/render-middleware.py" "$render_dir/middleware.yaml"
 kubectl apply -f "$render_dir/middleware.yaml"
 if [[ "$local_storage" == true ]]; then
   KUBE_NAMESPACE="$KUBE_NAMESPACE" python3 "$script_dir/setup-local-storage.py"
@@ -150,7 +151,7 @@ if ! kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound pv
   echo 'Kafka PVC did not bind; check the StorageClass or use --local-storage.' >&2
   exit 1
 fi
-for middleware in mysql redis; do
+for middleware in mysql redis loki tempo; do
   if ! kubectl -n "$KUBE_NAMESPACE" rollout status "statefulset/$middleware" --timeout=10m; then
     kubectl -n "$KUBE_NAMESPACE" get pvc -o wide || true
     kubectl -n "$KUBE_NAMESPACE" describe pvc "$middleware-data" || true
@@ -158,6 +159,7 @@ for middleware in mysql redis; do
     exit 1
   fi
 done
+kubectl -n "$KUBE_NAMESPACE" rollout status deployment/grafana --timeout=5m
 kubectl -n "$KUBE_NAMESPACE" delete deployment/etcd deployment/kafka statefulset/envoy service/envoy-headless \
   --ignore-not-found --cascade=foreground --wait=true --timeout=5m
 kubectl apply -f "$render_dir/stack.yaml"
